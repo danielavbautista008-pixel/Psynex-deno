@@ -2,7 +2,8 @@ import type { RouterContext } from "../Dependencies/dependencias.ts";
 import { hash, compare } from "../Dependencies/dependencias.ts";
 import { registroSchema, loginSchema } from "../Validators/AuthValidator.ts";
 import { buscarPorEmail, buscarPorId, crearUsuario, sinPassword } from "../Model/UsuarioModel.ts";
-import { CrearToken } from "../Helpers/Jwt.ts"
+import { EmailService } from "../Helpers/EmailService.ts";
+import { CrearToken } from "../Helpers/Jwt.ts";
 
 // Guarda el token en una cookie segura
 const ponerCookie = async (ctx: RouterContext<string>, userId: string) => {
@@ -38,6 +39,13 @@ export const registrar = async (ctx: RouterContext<string>) => {
         email: datos.email,
         passwordHash: await hash(datos.password),
     });
+
+    // Envío del correo de bienvenida en segundo plano
+    EmailService.enviarBienvenida({
+        to: datos.email,
+        nombreCompleto: datos.nombreCompleto,
+        rol: datos.rol,
+    }).catch((err) => console.error("Error al enviar email de bienvenida:", err));
 
     await ponerCookie(ctx, id);
     ctx.response.status = 201;

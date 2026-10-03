@@ -1,26 +1,179 @@
-### Registro
-POST http://localhost:8001/api/auth/register
+@baseUrl = http://localhost:8001
+
+
+### AUTHENTICATION & SESSION ENDPOINTS
+
+
+### 1. Registrar Nuevo Usuario (Paciente)
+# @name registrarPaciente
+POST {{baseUrl}}/api/auth/register
 Content-Type: application/json
 
 {
-  "nombreCompleto": "Ana Prueba",
-  "fechaNacimiento": "2000-01-15",
+  "nombreCompleto": "Ana María López",
+  "fechaNacimiento": "1998-05-20",
   "rol": "Paciente",
-  "email": "ana@prueba.com",
-  "password": "clave12345"
+  "email": "ana.lopez@example.com",
+  "password": "Password123"
 }
 
-### Login
-POST http://localhost:8001/api/auth/login
+### 2. Registrar Usuario Empresa
+# @name registrarEmpresa
+POST {{baseUrl}}/api/auth/register
 Content-Type: application/json
 
 {
-  "email": "ana@prueba.com",
-  "password": "clave12345"
+  "nombreCompleto": "Empresa Salud Vital S.A.S.",
+  "fechaNacimiento": "2010-01-01",
+  "rol": "Empresa",
+  "email": "contacto@saludvital.com",
+  "password": "Password123"
 }
 
-### Perfil (requiere la cookie del login)
-GET http://localhost:8001/api/auth/me
-Cookie: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI3NTMwNDk0MS03ZmIwLTQ1YWYtOTNkYS0wNDJjOGI1MTk4YTciLCJqdGkiOiJjNzQ2ZWQ1NC1kNzQ4LTRkNjQtYmEyYy1kMmUwZmQzNTdmN2EiLCJleHAiOjE3OTAyOTY5Mzh9.zNUcckAEqqnSTfFzMXvOZ-2CRWD_yNIKaj-gmr0xpwE; path=/; expires=Fri, 25 Sep 2026 00:42:18 GMT; samesite=lax; httponly
-### Logout
-POST http://localhost:8001/api/auth/logout
+### 3. Iniciar Sesión (Guarda la cookie HTTP-Only "token" automáticamente)
+# @name login
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "ana.lopez@example.com",
+  "password": "Password123"
+}
+
+### 4. Consultar Perfil Propio / Sesión Actual (Requiere Cookie del Login)
+# @name me
+GET {{baseUrl}}/api/auth/me
+
+### 5. Cerrar Sesión (Elimina la cookie token)
+# @name logout
+POST {{baseUrl}}/api/auth/logout
+
+
+
+### ADMINISTRACIÓN DE USUARIOS (Requiere Sesión con Rol "Admin")
+
+
+### 6. Listar Usuarios (Paginado y Filtrado)
+GET {{baseUrl}}/usuarios?pagina=1&porPagina=10&rol=Paciente
+
+### 7. Cambiar Estado de Usuario (Activar / Desactivar)
+# Reemplaza {usuarioId} por un ID real de la base de datos
+PATCH {{baseUrl}}/usuarios/UUID-DEL-USUARIO/estado
+Content-Type: application/json
+
+{
+  "estadoActivo": false
+}
+
+
+
+### CUESTIONARIOS Y EVALUACIONES PSICOLÓGICAS
+
+
+### 8. Listar Todos los Cuestionarios Disponibles
+GET {{baseUrl}}/cuestionarios
+
+### 9. Listar Categorías de Cuestionarios
+GET {{baseUrl}}/cuestionarios/categorias
+
+### 10. Ver Detalle de Cuestionario con Preguntas
+# Reemplaza {id} con el ID de un cuestionario
+GET {{baseUrl}}/cuestionarios/UUID-DEL-CUESTIONARIO
+
+### 11. Estadísticas de Cuestionarios (Solo Admin)
+GET {{baseUrl}}/cuestionarios/estadisticas
+
+### 12. Crear Nuevo Cuestionario (Solo Admin)
+POST {{baseUrl}}/cuestionarios
+Content-Type: application/json
+
+{
+  "nombreCuestionario": "Ansiedad GAD-7",
+  "descripcion": "Escala para la evaluación de la ansiedad generalizada",
+  "numeroPreguntas": 7,
+  "puntajeMaximo": 21,
+  "categoriaId": null
+}
+
+### 13. Cambiar Estado de Cuestionario (Activar/Desactivar)
+PATCH {{baseUrl}}/cuestionarios/UUID-DEL-CUESTIONARIO/estado
+Content-Type: application/json
+
+{
+  "estadoActivo": true
+}
+
+
+-------
+### 1. Login como administrador (pon la clave real de admin@psynex.com)
+# @name loginAdmin
+POST http://localhost:8001/login
+Content-Type: application/json
+
+{
+  "email": "psynex.2025.ye@gmail.com",
+  "password": "Psynex.2026.ye.2028"
+}
+
+### 2. Estadísticas de los últimos 6 meses (debe dar 200)
+GET http://localhost:8001/estadisticas?meses=6
+Authorization: Bearer {{loginAdmin.response.body.$.token}}
+
+### 3. Otros períodos válidos (3 y 12)
+GET http://localhost:8001/estadisticas?meses=3
+Authorization: Bearer {{loginAdmin.response.body.$.token}}
+
+###
+GET http://localhost:8001/estadisticas?meses=12
+Authorization: Bearer {{loginAdmin.response.body.$.token}}
+
+### 4. Sin el parámetro: usa 6 por defecto (debe dar 200)
+GET http://localhost:8001/estadisticas
+Authorization: Bearer {{loginAdmin.response.body.$.token}}
+
+### 5. Período no permitido (debe dar 400)
+GET http://localhost:8001/estadisticas?meses=7
+Authorization: Bearer {{loginAdmin.response.body.$.token}}
+
+### 6. Sin sesión (debe dar 401)
+GET http://localhost:8001/estadisticas?meses=6
+
+### 7. Con un Paciente (debe dar 403: no es Admin)
+# @name loginPaciente
+POST http://localhost:8001/login
+Content-Type: application/json
+
+{
+  "email": "ana.lopez@example.com",
+  "password": "Password123"
+}
+
+###
+GET http://localhost:8001/estadisticas?meses=6
+Authorization: Bearer {{loginPaciente.response.body.$.token}}
+
+
+###citas
+@baseUrl = http://localhost:8001
+
+### 1. Login Admin
+# @name loginAdmin
+POST {{baseUrl}}/login
+Content-Type: application/json
+
+{
+  "email": "psynex.2025.ye@gmail.com",
+  "password": "Psynex.2026.ye.2028"
+}
+
+### 2. Listar citas (usando el token del login)
+GET {{baseUrl}}/api/admin/citas
+Authorization: Bearer {{loginAdmin.response.body.token}}
+
+### 3. Citas filtradas
+GET {{baseUrl}}/api/admin/citas?estado=Completada
+Authorization: Bearer {{loginAdmin.response.body.token}}
+
+### 4. Detalle de una cita
+GET {{baseUrl}}/api/admin/citas/2cc19a4d-af97-4a26-bf56-6ce76171fe68
+Authorization: Bearer {{loginAdmin.response.body.token}}

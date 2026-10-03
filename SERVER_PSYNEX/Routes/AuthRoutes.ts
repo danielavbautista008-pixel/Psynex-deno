@@ -1,6 +1,6 @@
 import { Router } from "../Dependencies/dependencias.ts";
 import { registrar, login, logout, perfil } from "../Controller/AuthController.ts";
-import { requireAuth } from "../Middlewares/AuthMiddleware.ts";
+import { requireAuth } from "../Middlewares/RequireAuth.ts";
 
 const router = new Router({ prefix: "/api/auth" });
 
