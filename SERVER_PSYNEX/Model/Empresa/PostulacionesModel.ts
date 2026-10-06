@@ -1,4 +1,4 @@
-import { conexion } from "../Model/conexion.ts";
+import { conexion } from "../conexion.ts";
 
 export interface PostulacionData {
     postulacionId?: string | null;
@@ -28,13 +28,14 @@ export class Postulacion {
     }
 
     // Seleccionar por ID
-    public async SeleccionarPorId(id: string): Promise<PostulacionData | null> {
-        const { rows } = await conexion.execute(
-            `SELECT * FROM "Postulaciones" WHERE "PostulacionId" = $1`,
-            [id]
-        );
-        return rows.length > 0 ? (rows[0] as PostulacionData) : null;
-    }
+   public async SeleccionarPorId(id: string): Promise<PostulacionData | null> {
+    const { rows } = await conexion.execute(
+        `SELECT * FROM "Postulaciones" WHERE "PostulacionId" = $1`,
+        [id]
+    );
+
+    return (rows?.length ?? 0) > 0 ? (rows?.[0] as PostulacionData) : null;
+}
 
     // 1. Obtener postulaciones realizadas por un Usuario
     public async SeleccionarPorUsuario(usuarioId: string): Promise<PostulacionResponseData[]> {
@@ -62,13 +63,14 @@ export class Postulacion {
     }
 
     // Validar duplicados
-    public async ExistePostulacion(ofertaId: string, usuarioId: string): Promise<boolean> {
-        const { rows } = await conexion.execute(
-            `SELECT COUNT(*) as total FROM "Postulaciones" WHERE "OfertaId" = $1 AND "UsuarioId" = $2`,
-            [ofertaId, usuarioId]
-        );
-        return Number(rows[0]?.total ?? 0) > 0;
-    }
+   public async ExistePostulacion(ofertaId: string, usuarioId: string): Promise<boolean> {
+    const { rows } = await conexion.execute(
+        `SELECT COUNT(*) as total FROM "Postulaciones" WHERE "OfertaId" = $1 AND "UsuarioId" = $2`,
+        [ofertaId, usuarioId]
+    );
+
+    return Number(rows?.[0]?.total ?? 0) > 0;
+}
 
     // 3. Crear Postulación
     public async InsertarPostulacion(datos: PostulacionData): Promise<PostulacionResponseData> {
@@ -96,7 +98,7 @@ export class Postulacion {
             [datos.usuarioId]
         );
 
-        const usuario = usuarios.length > 0 ? usuarios[0] : null;
+        const usuario = (usuarios?.length ?? 0) > 0 ? usuarios?.[0] : null;
 
         return {
             ...datos,

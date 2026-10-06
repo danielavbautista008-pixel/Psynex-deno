@@ -1,18 +1,18 @@
-import { conexion } from "../Model/conexion.ts";
+import { conexion } from "../conexion.ts";
 
 export interface PerfilEmpresaData {
     perfileId?: string | null;
     usuarioId: string;
     nombreEmpresa: string;
     nit: string;
-    sector?: string | null;
-    telefono?: string | null;
-    direccion?: string | null;
-    sitioWeb?: string | null;
-    logo?: string | null;
-    descripcion?: string | null;
-    estaVerificada?: boolean;
-    creadoEn?: Date | string | null;
+    sector: string | null;
+    telefono: string | null;
+    direccion: string | null;
+    sitioWeb: string | null;
+    logo: string | null;
+    descripcion: string | null;
+    estaVerificada: boolean;
+    creadoEn: Date | string | null;
 }
 
 export class PerfilEmpresa {
