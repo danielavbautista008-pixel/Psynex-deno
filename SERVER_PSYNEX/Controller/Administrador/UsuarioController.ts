@@ -1,10 +1,6 @@
 import { Context, RouterContext, Status } from "../../Dependencies/dependencias.ts";
 import { UsuarioModel } from "../../Model/Administrador/UsuarioModel.ts";
-import { hashPassword, compararPassword } from "../../Helpers/Password.ts";
-import { CrearToken } from "../../Helpers/Jwt.ts";
 import {
-  registroSchema,
-  loginSchema,
   filtroUsuariosSchema,
   cambiarEstadoSchema,
   observacionSchema,
@@ -24,82 +20,6 @@ async function leerBody(ctx: Context): Promise<unknown | null> {
 }
 
 export const UsuarioController = {
-  // POST /registro — RF-01 (público, solo Paciente)
-  async registrar(ctx: Context) {
-    const body = await leerBody(ctx);
-    const parsed = registroSchema.safeParse(body);
-
-    if (!parsed.success) {
-      ctx.response.status = Status.BadRequest;
-      ctx.response.body = { ok: false, errores: parsed.error.flatten().fieldErrors };
-      return;
-    }
-
-    const existente = await UsuarioModel.buscarPorEmail(parsed.data.email);
-    if (existente) {
-      ctx.response.status = Status.Conflict;
-      ctx.response.body = { ok: false, mensaje: "Ese correo ya está registrado" };
-      return;
-    }
-
-    const passwordHash = await hashPassword(parsed.data.password);
-    const usuarioId = await UsuarioModel.crear({
-      nombreCompleto: parsed.data.nombreCompleto,
-      fechaNacimiento: parsed.data.fechaNacimiento,
-      rol: parsed.data.rol,
-      email: parsed.data.email,
-      passwordHash,
-    });
-
-    ctx.response.status = Status.Created;
-    ctx.response.body = { ok: true, usuarioId };
-  },
-
-  // POST /login — RF-02 (Astro toma este JWT y lo entrega como cookie httpOnly)
-  async login(ctx: Context) {
-    const body = await leerBody(ctx);
-    const parsed = loginSchema.safeParse(body);
-
-    if (!parsed.success) {
-      ctx.response.status = Status.BadRequest;
-      ctx.response.body = { ok: false, errores: parsed.error.flatten().fieldErrors };
-      return;
-    }
-
-    const usuario = await UsuarioModel.buscarPorEmail(parsed.data.email);
-    const passwordValida = usuario
-      ? await compararPassword(parsed.data.password, usuario.PasswordHash)
-      : false;
-
-    // Mensaje genérico: no revela si falló el email o la contraseña (RNF-06)
-    if (!usuario || !passwordValida) {
-      ctx.response.status = Status.Unauthorized;
-      ctx.response.body = { ok: false, mensaje: "Correo o contraseña incorrectos" };
-      return;
-    }
-
-    if (!usuario.EstadoActivo) {
-      ctx.response.status = Status.Forbidden;
-      ctx.response.body = { ok: false, mensaje: "Esta cuenta está desactivada" };
-      return;
-    }
-
-    // El token solo lleva el id (sub). El rol lo consulta requireAuth en la base de datos.
-    const token = await CrearToken(String(usuario.UsuarioId));
-
-    ctx.response.status = Status.OK;
-    ctx.response.body = {
-      ok: true,
-      token, // Astro guarda esto como cookie httpOnly, no se expone al navegador
-      usuario: {
-        usuarioId: usuario.UsuarioId,
-        nombreCompleto: usuario.NombreCompleto,
-        rol: usuario.Rol,
-        email: usuario.Email,
-      },
-    };
-  },
-
   // GET /usuarios — RF-40, solo Admin. Devuelve { datos, total, pagina, porPagina }.
   async listar(ctx: Context) {
     const params = Object.fromEntries(ctx.request.url.searchParams);

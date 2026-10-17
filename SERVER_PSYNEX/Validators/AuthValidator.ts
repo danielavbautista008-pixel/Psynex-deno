@@ -15,3 +15,15 @@ export const registroSchema = z.object({      //registroSchema:Valida que el obj
     password: z.string().min(1, "La contraseña es Obligatoria"),  //Debe ser un texto con una longitud mínima de 1 carácter. Si no se proporciona, devuelve el mensaje "La contraseña es Obligatoria".
  });
 
+
+// ---------- Recuperar contraseña ----------
+export const solicitarRecuperacionSchema = z.object({
+    email: z.string().trim().toLowerCase().email("Escribe un correo válido"),
+});
+
+export const restablecerPasswordSchema = z.object({
+    token: z.string().min(20, "El enlace no es válido").max(2000, "El enlace no es válido"),
+    password: z.string()
+        .min(8, "La contraseña debe tener mínimo 8 caracteres")
+        .max(72, "La contraseña puede tener máximo 72 caracteres"),
+});
