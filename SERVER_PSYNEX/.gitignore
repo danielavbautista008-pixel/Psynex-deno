@@ -1,1 +1,4 @@
 .env
+# Archivos que suben psicólogos y empresas (documentos personales): nunca a git
+uploads/*
+!uploads/.gitkeep

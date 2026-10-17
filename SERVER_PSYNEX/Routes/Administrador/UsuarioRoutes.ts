@@ -5,9 +5,9 @@ import { requiereRol } from "../../Middlewares/RequiereRol.ts";
 
 const UsuarioRoutes = new Router();
 
-// Públicas
-UsuarioRoutes.post("/login", UsuarioController.login);
-UsuarioRoutes.post("/registro", UsuarioController.registrar);
+// El login y el registro viven en /api/auth (AuthRoutes.ts).
+// Antes había una copia aquí (/login y /registro) con reglas distintas;
+// se quitó para que exista un solo camino de autenticación.
 
 // Requieren sesión iniciada
 UsuarioRoutes.get("/usuarios/yo", requireAuth, UsuarioController.perfilPropio);

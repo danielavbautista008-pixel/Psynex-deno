@@ -53,5 +53,44 @@ CuestionariosRouter.patch(
     CuestionarioController.cambiarEstado,
 );
 
+// RF-42: editar datos generales, solo Administrador
+CuestionariosRouter.patch(
+    "/cuestionarios/:id",
+    requireAuth,
+    requiereRol("Admin"),
+    CuestionarioController.actualizar,
+);
+
+// Corregir el texto de preguntas y opciones, solo Administrador
+CuestionariosRouter.put(
+    "/cuestionarios/:id/preguntas",
+    requireAuth,
+    requiereRol("Admin"),
+    CuestionarioController.actualizarPreguntas,
+);
+
+// Imagen de portada del cuestionario (la muestra la página pública de Tests)
+CuestionariosRouter.put(
+    "/cuestionarios/:id/imagen",
+    requireAuth,
+    requiereRol("Admin"),
+    CuestionarioController.subirImagen,
+);
+
+CuestionariosRouter.delete(
+    "/cuestionarios/:id/imagen",
+    requireAuth,
+    requiereRol("Admin"),
+    CuestionarioController.quitarImagen,
+);
+
+// RF-42: eliminar (solo si nadie lo ha usado), solo Administrador
+CuestionariosRouter.delete(
+    "/cuestionarios/:id",
+    requireAuth,
+    requiereRol("Admin"),
+    CuestionarioController.eliminar,
+);
+
 // También como default, así sirve con cualquiera de los dos estilos de import
 export default CuestionariosRouter;
