@@ -1,9 +1,9 @@
-import { Router } from "../Dependencies/dependencias.ts";
+import { Router } from "https://deno.land/x/oak/mod.ts";
 import {
     getPorUsuario,
     crearNotificacion,
     marcarLeida,
-} from "../Controller/notificacionController.ts";
+} from "../../Controller/Empresa/notificacionesController.ts";
 
 const NotificacionRouter = new Router();
 

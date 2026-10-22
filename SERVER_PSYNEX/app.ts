@@ -1,34 +1,52 @@
 import { Application, oakCors } from "./Dependencies/dependencias.ts";
 import authRoutes from "./Routes/AuthRoutes.ts";
 import usuarioRoutes from "./Routes/Administrador/UsuarioRoutes.ts";
-import  CuestionariosRouter  from "./Routes/Administrador/CuestionariosRoutes.ts";
+import CuestionariosRouter from "./Routes/Administrador/CuestionariosRoutes.ts";
 import EstadisticasRoutes from "./Routes/Administrador/EstadisticasRoutes.ts";
 import CitasRouter from "./Routes/Administrador/CitasRoutes.ts";
+import { PerfilEmpresaRouter  } from "./Routes/Empresa/perfilRouter.ts";
+import ofertaLaboralRouter from "./Routes/Empresa/ofertaRouter.ts";
+import postulacionRouter from "./Routes/Empresa/postulacionesRouter.ts";
+import favoritoRouter from "./Routes/Empresa/favoritosRouter.ts";
+import { NotificacionRouter } from "./Routes/Empresa/notificacionesRouter.ts";
 
 
 const app = new Application();
 
 app.use(oakCors({
-    origin: "http://localhost:4321", // el origen de tu frontend (Astro)
-    credentials: true,               // necesario para que viajen las cookies
+  origin: "http://localhost:4321", // el origen de tu frontend (Astro)
+  credentials: true, // necesario para que viajen las cookies
 }));
 
 // Manejo de errores global: si algo lanza una excepción, responde 500 en JSON
 // en vez de dejar la petición colgada.
 app.use(async (ctx, next) => {
-    try {
-        await next();
-    } catch (error) {
-        console.error("Error no controlado:", error);
-        ctx.response.status = 500;
-        ctx.response.body = { ok: false, mensaje: "Error interno del servidor" };
-    }
+  try {
+    await next();
+  } catch (error) {
+    console.error("Error no controlado:", error);
+    ctx.response.status = 500;
+    ctx.response.body = { ok: false, mensaje: "Error interno del servidor" };
+  }
 });
 
-const routes = [authRoutes, usuarioRoutes, CuestionariosRouter, EstadisticasRoutes, CitasRouter];
+const routes = [
+  authRoutes,
+  usuarioRoutes,
+  CuestionariosRouter,
+  EstadisticasRoutes,
+  CitasRouter,
+  // Empresa
+  PerfilEmpresaRouter,
+  ofertaLaboralRouter,
+  postulacionRouter,
+  NotificacionRouter,
+  favoritoRouter
+
+];
 routes.forEach((router) => {
-    app.use(router.routes());
-    app.use(router.allowedMethods());
+  app.use(router.routes());
+  app.use(router.allowedMethods());
 });
 
 console.log("Servidor corriendo por el puerto 8001");
