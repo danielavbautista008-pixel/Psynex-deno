@@ -1,10 +1,44 @@
+#####################################################################
+#  PSYNEX - PRUEBAS DE LA API (extensión "REST Client" de VS Code)
+#
+#  CÓMO USARLO
+#  1. Levanta el servidor:  deno task dev   (puerto 8001)
+#  2. Escribe tus correos/contraseñas de prueba en las variables de abajo.
+#     ¡NO subas a git contraseñas reales! Déjalas vacías antes de hacer commit.
+#  3. Ejecuta primero el LOGIN del rol que vas a probar. El servidor guarda
+#     el token en la cookie "token" y REST Client la reenvía sola en las
+#     siguientes peticiones (ya no hace falta "Authorization: Bearer").
+#  4. Para cambiar de rol: ejecuta LOGOUT y luego el login del otro rol.
+#  5. Las líneas "# @name xxx" guardan la respuesta para reutilizar IDs:
+#     {{xxx.response.body.$.campo}}
+#####################################################################
+
 @baseUrl = http://localhost:8001
 
+# --- Credenciales de prueba (rellénalas solo en tu equipo) ---
+@adminEmail = admin@ejemplo.com
+@adminPassword = CAMBIAR
+@psiEmail = psicologo@ejemplo.com
+@psiPassword = CAMBIAR
+@pacienteEmail = ana.lopez@example.com
+@pacientePassword = Password123
 
-### AUTHENTICATION & SESSION ENDPOINTS
+# --- IDs de ejemplo de tu base de datos (cámbialos si no existen) ---
+@perfilPsicologoId = 4adb5ef8-0368-45c9-a7ab-04c74a66257e
+@pacienteId = 707088da-6073-4cc1-879e-50625b6824fc
+@citaId = 7c6a66d6-ec6a-4370-b1d9-03e6fe931122
+@cuestionarioId = 0385bd92-52ee-4f68-b187-d19da64faa3c
+@categoriaId = 1406cc94-14a2-4199-904c-0d0f95bda3e9
+@ofertaId = 3252f672-496f-f111-8c20-e86a6456947a
+@alertaId = 372ef646-c256-4a0f-95db-581bdfe186fe
+@empresaPerfilId = 087218f3-b131-4596-9d84-c5fcb2ff80bf
 
 
-### 1. Registrar Nuevo Usuario (Paciente)
+#####################################################################
+#  1. AUTENTICACIÓN  (/api/auth)
+#####################################################################
+
+### 1.1 Registrar paciente (JSON)
 # @name registrarPaciente
 POST {{baseUrl}}/api/auth/register
 Content-Type: application/json
@@ -13,51 +47,159 @@ Content-Type: application/json
   "nombreCompleto": "Ana María López",
   "fechaNacimiento": "1998-05-20",
   "rol": "Paciente",
-  "email": "ana.lopez@example.com",
-  "password": "Password123"
+  "email": "{{pacienteEmail}}",
+  "password": "{{pacientePassword}}"
 }
 
-### 2. Registrar Usuario Empresa
-# @name registrarEmpresa
-POST {{baseUrl}}/api/auth/register
+### 1.2 Registrar psicólogo (multipart con los 4 documentos: PDF, JPG o PNG)
+# Usa el PDF de ejemplo de la carpeta pruebas/. Queda "sin verificar"
+# hasta que el admin lo apruebe (ver 3.4).
+# @name registrarPsicologo
+POST {{baseUrl}}/api/auth/registro/psicologo
+Content-Type: multipart/form-data; boundary=----PsynexBoundary
+
+------PsynexBoundary
+Content-Disposition: form-data; name="nombreCompleto"
+
+Psicóloga de Prueba
+------PsynexBoundary
+Content-Disposition: form-data; name="email"
+
+psicologa.prueba@example.com
+------PsynexBoundary
+Content-Disposition: form-data; name="password"
+
+Password123
+------PsynexBoundary
+Content-Disposition: form-data; name="fechaNacimiento"
+
+1990-03-15
+------PsynexBoundary
+Content-Disposition: form-data; name="numeroDocumento"
+
+1023456789
+------PsynexBoundary
+Content-Disposition: form-data; name="tarjetaProfesional"; filename="tarjeta.pdf"
+Content-Type: application/pdf
+
+< ./pruebas/documento-prueba.pdf
+------PsynexBoundary
+Content-Disposition: form-data; name="cedula"; filename="cedula.pdf"
+Content-Type: application/pdf
+
+< ./pruebas/documento-prueba.pdf
+------PsynexBoundary
+Content-Disposition: form-data; name="diploma"; filename="diploma.pdf"
+Content-Type: application/pdf
+
+< ./pruebas/documento-prueba.pdf
+------PsynexBoundary
+Content-Disposition: form-data; name="certificadoVigencia"; filename="vigencia.pdf"
+Content-Type: application/pdf
+
+< ./pruebas/documento-prueba.pdf
+------PsynexBoundary--
+
+### 1.3 Registro de psicólogo enviado como JSON (debe dar 400)
+POST {{baseUrl}}/api/auth/registro/psicologo
 Content-Type: application/json
 
-{
-  "nombreCompleto": "Empresa Salud Vital S.A.S.",
-  "fechaNacimiento": "2010-01-01",
-  "rol": "Empresa",
-  "email": "contacto@saludvital.com",
-  "password": "Password123"
-}
+{ "nombreCompleto": "X" }
 
-### 3. Iniciar Sesión (Guarda la cookie HTTP-Only "token" automáticamente)
-# @name login
+### 1.4 Login ADMIN (guarda la cookie)
+# @name loginAdmin
 POST {{baseUrl}}/api/auth/login
 Content-Type: application/json
 
 {
-  "email": "ana.lopez@example.com",
-  "password": "Password123"
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
 }
 
-### 4. Consultar Perfil Propio / Sesión Actual (Requiere Cookie del Login)
-# @name me
+### 1.5 Login PSICÓLOGO
+# @name loginPsi
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{psiEmail}}",
+  "password": "{{psiPassword}}"
+}
+
+### 1.6 Login PACIENTE
+# @name loginPaciente
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{pacienteEmail}}",
+  "password": "{{pacientePassword}}"
+}
+
+### 1.7 Login con clave incorrecta (debe dar 401)
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "clave-incorrecta"
+}
+
+### 1.8 Sesión actual (quién soy)
 GET {{baseUrl}}/api/auth/me
 
-### 5. Cerrar Sesión (Elimina la cookie token)
-# @name logout
+### 1.9 Cerrar sesión (borra la cookie)
 POST {{baseUrl}}/api/auth/logout
 
+### 1.10 Correo de prueba (SOLO ADMIN; sin sesión de admin da 401/403)
+POST {{baseUrl}}/api/auth/test-email
+Content-Type: application/json
+
+{
+  "to": "tu-correo@ejemplo.com",
+  "tipo": "bienvenida",
+  "rol": "Psicologo",
+  "nombre": "Psicóloga de Prueba"
+}
 
 
-### ADMINISTRACIÓN DE USUARIOS (Requiere Sesión con Rol "Admin")
+#####################################################################
+#  2. NOTIFICACIONES  (cualquier rol con sesión)
+#####################################################################
+
+### 2.1 Mis notificaciones (las últimas 30)
+# @name misNotificaciones
+GET {{baseUrl}}/api/notificaciones
+
+### 2.2 Solo no leídas
+GET {{baseUrl}}/api/notificaciones?soloNoLeidas=true&limite=10
+
+### 2.3 Marcar una como leída (usa un id del 2.1)
+PATCH {{baseUrl}}/api/notificaciones/{{misNotificaciones.response.body.$.notificaciones[0].NotificacionId}}/leida
+
+### 2.4 Marcar todas como leídas
+PATCH {{baseUrl}}/api/notificaciones/leer-todas
+
+### 2.5 Sin sesión (ejecuta 1.9 antes; debe dar 401)
+GET {{baseUrl}}/api/notificaciones
 
 
-### 6. Listar Usuarios (Paginado y Filtrado)
+#####################################################################
+#  3. ADMINISTRADOR   >>> ejecuta primero 1.4 (login admin) <<<
+#####################################################################
+
+# ---------- 3.1 Usuarios ----------
+
+### Listar usuarios (paginado y con filtros)
 GET {{baseUrl}}/usuarios?pagina=1&porPagina=10&rol=Paciente
 
-### 7. Cambiar Estado de Usuario (Activar / Desactivar)
-# Reemplaza {usuarioId} por un ID real de la base de datos
+### Resumen de usuarios
+GET {{baseUrl}}/usuarios/resumen
+
+### Mi usuario (admin)
+GET {{baseUrl}}/usuarios/yo
+
+### Activar / desactivar un usuario (pon un UsuarioId real)
 PATCH {{baseUrl}}/usuarios/UUID-DEL-USUARIO/estado
 Content-Type: application/json
 
@@ -65,114 +207,368 @@ Content-Type: application/json
   "estadoActivo": false
 }
 
+### Observaciones de un usuario
+GET {{baseUrl}}/usuarios/UUID-DEL-USUARIO/observaciones
 
+### Agregar observación
+POST {{baseUrl}}/usuarios/UUID-DEL-USUARIO/observaciones
+Content-Type: application/json
 
-### CUESTIONARIOS Y EVALUACIONES PSICOLÓGICAS
+{
+  "texto": "Se contactó al usuario para validar sus datos"
+}
 
+# ---------- 3.2 Estadísticas ----------
 
-### 8. Listar Todos los Cuestionarios Disponibles
+### Últimos 6 meses (por defecto)
+GET {{baseUrl}}/estadisticas
+
+### 3 y 12 meses
+GET {{baseUrl}}/estadisticas?meses=3
+
+###
+GET {{baseUrl}}/estadisticas?meses=12
+
+### Periodo no permitido (debe dar 400)
+GET {{baseUrl}}/estadisticas?meses=7
+
+# ---------- 3.3 Citas (vista admin) ----------
+
+### Listar citas
+GET {{baseUrl}}/api/admin/citas
+
+### Filtrar por estado
+GET {{baseUrl}}/api/admin/citas?estado=Completada
+
+### Detalle de una cita
+GET {{baseUrl}}/api/admin/citas/{{citaId}}
+
+# ---------- 3.4 Psicólogos: verificación y documentos ----------
+
+### Pendientes de verificar (por defecto)
+GET {{baseUrl}}/api/admin/psicologos
+
+### Solo verificados
+GET {{baseUrl}}/api/admin/psicologos?estado=verificado
+
+### Resumen
+GET {{baseUrl}}/api/admin/psicologos/resumen
+
+### Detalle de un psicólogo
+GET {{baseUrl}}/api/admin/psicologos/{{perfilPsicologoId}}
+
+### Documentos que subió el psicólogo (NUEVO)
+# @name docsPsicologo
+GET {{baseUrl}}/api/admin/psicologos/{{perfilPsicologoId}}/documentos
+
+### Ver / descargar un documento (NUEVO; usa un id del paso anterior)
+GET {{baseUrl}}/api/admin/psicologos/documentos/{{docsPsicologo.response.body.$.documentos[0].DocumentoArchivoId}}
+
+### Aprobar
+PATCH {{baseUrl}}/api/admin/psicologos/{{perfilPsicologoId}}/verificacion
+Content-Type: application/json
+
+{
+  "aprobado": true
+}
+
+### Rechazar
+PATCH {{baseUrl}}/api/admin/psicologos/{{perfilPsicologoId}}/verificacion
+Content-Type: application/json
+
+{
+  "aprobado": false,
+  "motivoRechazo": "Documentos ilegibles o incompletos"
+}
+
+# ---------- 3.5 Empresas: verificación ----------
+
+### Listar (pendientes por defecto)
+GET {{baseUrl}}/api/admin/empresas
+
+### Todas
+GET {{baseUrl}}/api/admin/empresas?estado=todos
+
+### Resumen
+GET {{baseUrl}}/api/admin/empresas/resumen
+
+### Detalle
+GET {{baseUrl}}/api/admin/empresas/{{empresaPerfilId}}
+
+### Aprobar
+PATCH {{baseUrl}}/api/admin/empresas/{{empresaPerfilId}}/verificacion
+Content-Type: application/json
+
+{
+  "aprobado": true
+}
+
+### Rechazar
+PATCH {{baseUrl}}/api/admin/empresas/{{empresaPerfilId}}/verificacion
+Content-Type: application/json
+
+{
+  "aprobado": false,
+  "motivoRechazo": "NIT o documentos incompletos"
+}
+
+# ---------- 3.6 Cuestionarios ----------
+
+### Listar
 GET {{baseUrl}}/cuestionarios
 
-### 9. Listar Categorías de Cuestionarios
+### Categorías
 GET {{baseUrl}}/cuestionarios/categorias
 
-### 10. Ver Detalle de Cuestionario con Preguntas
-# Reemplaza {id} con el ID de un cuestionario
-GET {{baseUrl}}/cuestionarios/UUID-DEL-CUESTIONARIO
-
-### 11. Estadísticas de Cuestionarios (Solo Admin)
+### Estadísticas
 GET {{baseUrl}}/cuestionarios/estadisticas
 
-### 12. Crear Nuevo Cuestionario (Solo Admin)
+### Detalle con preguntas
+GET {{baseUrl}}/cuestionarios/{{cuestionarioId}}
+
+### Crear (con preguntas y opciones; se guarda todo o nada)
+# @name crearCuestionario
 POST {{baseUrl}}/cuestionarios
 Content-Type: application/json
 
 {
-  "nombreCuestionario": "Ansiedad GAD-7",
-  "descripcion": "Escala para la evaluación de la ansiedad generalizada",
-  "numeroPreguntas": 7,
-  "puntajeMaximo": 21,
-  "categoriaId": null
+  "nombreCuestionario": "Cuestionario de prueba",
+  "descripcion": "Cuestionario creado desde api.rest",
+  "categoriaId": "{{categoriaId}}",
+  "puntajeMaximo": 6,
+  "preguntas": [
+    {
+      "numero": 1,
+      "textoPregunta": "¿Cómo has dormido esta semana?",
+      "opciones": [
+        { "texto": "Bien", "valor": 0 },
+        { "texto": "Regular", "valor": 1 },
+        { "texto": "Mal", "valor": 3 }
+      ]
+    },
+    {
+      "numero": 2,
+      "textoPregunta": "¿Te has sentido nervioso?",
+      "opciones": [
+        { "texto": "Nunca", "valor": 0 },
+        { "texto": "Casi siempre", "valor": 3 }
+      ]
+    }
+  ]
 }
 
-### 13. Cambiar Estado de Cuestionario (Activar/Desactivar)
-PATCH {{baseUrl}}/cuestionarios/UUID-DEL-CUESTIONARIO/estado
+### Crear con body vacío (debe dar 400, antes daba 500)
+POST {{baseUrl}}/cuestionarios
+Content-Type: application/json
+
+### Editar datos generales (NUEVO)
+PATCH {{baseUrl}}/cuestionarios/{{crearCuestionario.response.body.$.cuestionarioId}}
 Content-Type: application/json
 
 {
+  "descripcion": "Descripción actualizada",
+  "puntajeMaximo": 6
+}
+
+### Activar / desactivar
+PATCH {{baseUrl}}/cuestionarios/{{crearCuestionario.response.body.$.cuestionarioId}}/estado
+Content-Type: application/json
+
+{
+  "estadoActivo": false
+}
+
+### Eliminar (NUEVO; si ya tiene respuestas o asignaciones da 409: mejor desactivarlo)
+DELETE {{baseUrl}}/cuestionarios/{{crearCuestionario.response.body.$.cuestionarioId}}
+
+# ---------- 3.7 Blog ----------
+
+### Crear artículo
+# @name crearArticulo
+POST {{baseUrl}}/api/admin/blog
+Content-Type: application/json
+
+{
+  "titulo": "Cómo manejar la ansiedad en el día a día",
+  "resumen": "Consejos prácticos respaldados por profesionales.",
+  "contenido": "<p>La ansiedad es una respuesta natural del cuerpo. Aquí algunas estrategias...</p>",
+  "autorNombre": "Equipo Psynex",
+  "autorRol": "Contenido educativo",
+  "imagenPortada": null,
+  "publicado": true
+}
+
+### Listar (admin)
+GET {{baseUrl}}/api/admin/blog
+
+### Detalle (admin)
+GET {{baseUrl}}/api/admin/blog/{{crearArticulo.response.body.$.articuloId}}
+
+### Listar (público, sin sesión)
+GET {{baseUrl}}/api/blog
+
+### Detalle público por slug
+GET {{baseUrl}}/api/blog/como-manejar-la-ansiedad-en-el-dia-a-dia
+
+### Despublicar
+PATCH {{baseUrl}}/api/admin/blog/{{crearArticulo.response.body.$.articuloId}}
+Content-Type: application/json
+
+{
+  "publicado": false
+}
+
+### Eliminar
+DELETE {{baseUrl}}/api/admin/blog/{{crearArticulo.response.body.$.articuloId}}
+
+# ---------- 3.8 Métodos de pago ----------
+
+### Listar
+GET {{baseUrl}}/api/admin/metodos-pago
+
+### Crear
+# @name crearMetodo
+POST {{baseUrl}}/api/admin/metodos-pago
+Content-Type: application/json
+
+{
+  "nombre": "Transferencia bancaria",
   "estadoActivo": true
 }
 
+### Editar
+PATCH {{baseUrl}}/api/admin/metodos-pago/{{crearMetodo.response.body.$.metodoPagoId}}
+Content-Type: application/json
 
--------
-### 1. Login como administrador (pon la clave real de admin@psynex.com)
-# @name loginAdmin
-POST http://localhost:8001/login
+{
+  "estadoActivo": false
+}
+
+### Eliminar
+DELETE {{baseUrl}}/api/admin/metodos-pago/{{crearMetodo.response.body.$.metodoPagoId}}
+
+# ---------- 3.9 Planes ----------
+
+### Crear plan
+# @name crearPlan
+POST {{baseUrl}}/api/admin/planes
 Content-Type: application/json
 
 {
   "email": "yudycogaria@gmail.com",
   "password": "empresa123"
+  "nombre": "Plan Bienestar Mensual",
+  "descripcion": "4 sesiones virtuales al mes con psicólogo asignado.",
+  "beneficios": "4 sesiones\nChat de apoyo\nPrioridad en agenda",
+  "tipo": "Individual",
+  "precio": 280000,
+  "moneda": "COP",
+  "cantidadSesiones": 4,
+  "duracionDias": 30,
+  "publicado": true,
+  "orden": 1
 }
 
-### 2. Estadísticas de los últimos 6 meses (debe dar 200)
-GET http://localhost:8001/estadisticas?meses=6
-Authorization: Bearer {{loginAdmin.response.body.$.token}}
+### Listar (admin)
+GET {{baseUrl}}/api/admin/planes
 
-### 3. Otros períodos válidos (3 y 12)
-GET http://localhost:8001/estadisticas?meses=3
-Authorization: Bearer {{loginAdmin.response.body.$.token}}
+### Detalle
+GET {{baseUrl}}/api/admin/planes/{{crearPlan.response.body.$.planId}}
 
-###
-GET http://localhost:8001/estadisticas?meses=12
-Authorization: Bearer {{loginAdmin.response.body.$.token}}
-
-### 4. Sin el parámetro: usa 6 por defecto (debe dar 200)
-GET http://localhost:8001/estadisticas
-Authorization: Bearer {{loginAdmin.response.body.$.token}}
-
-### 5. Período no permitido (debe dar 400)
-GET http://localhost:8001/estadisticas?meses=7
-Authorization: Bearer {{loginAdmin.response.body.$.token}}
-
-### 6. Sin sesión (debe dar 401)
-GET http://localhost:8001/estadisticas?meses=6
-
-### 7. Con un Paciente (debe dar 403: no es Admin)
-# @name loginPaciente
-POST http://localhost:8001/login
+### Editar
+PATCH {{baseUrl}}/api/admin/planes/{{crearPlan.response.body.$.planId}}
 Content-Type: application/json
 
 {
-  "email": "ana.lopez@example.com",
-  "password": "Password123"
+  "precio": 300000
 }
 
-###
-GET http://localhost:8001/estadisticas?meses=6
-Authorization: Bearer {{loginPaciente.response.body.$.token}}
+### Eliminar
+DELETE {{baseUrl}}/api/admin/planes/{{crearPlan.response.body.$.planId}}
 
+### Listar (público)
+GET {{baseUrl}}/api/planes
 
-###citas
-@baseUrl = http://localhost:8001
+# ---------- 3.10 Finanzas (cobros y transferencias a psicólogos) ----------
 
-### 1. Login Admin
-# @name loginAdmin
-POST {{baseUrl}}/login
+### Resumen
+GET {{baseUrl}}/api/admin/finanzas/resumen
+
+### Panel completo
+GET {{baseUrl}}/api/admin/finanzas/panel
+
+### Pagos (ahora incluye Origen, PorcentajeComision y FechaTransferencia)
+GET {{baseUrl}}/api/admin/finanzas/pagos?pagina=1
+
+### Transferencias pendientes agrupadas por psicólogo (NUEVO)
+# @name transferencias
+GET {{baseUrl}}/api/admin/finanzas/transferencias
+
+### Marcar UN pago como transferido (NUEVO; pon un PagoId real)
+PATCH {{baseUrl}}/api/admin/finanzas/pagos/UUID-DEL-PAGO/transferir
 Content-Type: application/json
 
 {
-  "email": "psynex.2025.ye@gmail.com",
-  "password": "Psynex.2026.ye.2028"
+  "comprobante": "Transferencia Bancolombia #123456"
 }
 
-### 2. Listar citas (usando el token del login)
-GET {{baseUrl}}/api/admin/citas
-Authorization: Bearer {{loginAdmin.response.body.token}}
+### Marcar TODO lo pendiente de un psicólogo como transferido (NUEVO)
+PATCH {{baseUrl}}/api/admin/finanzas/psicologos/{{perfilPsicologoId}}/transferir
+Content-Type: application/json
 
-### 3. Citas filtradas
-GET {{baseUrl}}/api/admin/citas?estado=Completada
-Authorization: Bearer {{loginAdmin.response.body.token}}
+{
+  "comprobante": "Transferencia Bancolombia #123457"
+}
+
+### Verificar la cuenta bancaria de un psicólogo (NUEVO; usa CuentaId del listado)
+PATCH {{baseUrl}}/api/admin/finanzas/cuentas/{{transferencias.response.body.$.psicologos[0].CuentaId}}/verificar
+
+# ---------- 3.11 Configuración: comisión, recompensas y reclamos (NUEVO) ----------
+
+### Ver configuración de la plataforma
+GET {{baseUrl}}/api/admin/configuracion
+
+### Cambiar el % de comisión de Psynex (solo afecta pagos nuevos)
+PATCH {{baseUrl}}/api/admin/configuracion/comision
+Content-Type: application/json
+
+{
+  "porcentaje": 30
+}
+
+### Comisión fuera de rango (debe dar 400)
+PATCH {{baseUrl}}/api/admin/configuracion/comision
+Content-Type: application/json
+
+{
+  "porcentaje": 150
+}
+
+### Periodos de citas gratuitas (recompensas)
+GET {{baseUrl}}/api/admin/recompensas
+
+### Crear / actualizar el cupo de un mes
+PUT {{baseUrl}}/api/admin/recompensas/2026/11
+Content-Type: application/json
+
+{
+  "cupoCitas": 20,
+  "valorPorCita": 70000
+}
+
+### Reclamos de pago de los psicólogos
+# @name reclamosAdmin
+GET {{baseUrl}}/api/admin/reclamos?estado=todos
+
+### Responder un reclamo (notifica al psicólogo)
+PATCH {{baseUrl}}/api/admin/reclamos/{{reclamosAdmin.response.body.$.reclamos[0].ReclamoId}}
+Content-Type: application/json
+
+{
+  "estado": "Resuelto",
+  "respuesta": "Ya se realizó la transferencia pendiente."
+}
+
 
 ### 4. Detalle de una cita
 GET {{baseUrl}}/api/admin/citas/2cc19a4d-af97-4a26-bf56-6ce76171fe68
@@ -356,3 +752,418 @@ Content-Type: application/json
 ### Eliminar favorito por ID
 DELETE http://localhost:8001/api/favoritos/1
 Accept: application/json
+#####################################################################
+#  4. PSICÓLOGO   >>> ejecuta 1.9 (logout) y luego 1.5 (login psicólogo) <<<
+#####################################################################
+
+# ---------- 4.1 Citas ----------
+
+### Resumen de hoy (pantalla Inicio)
+GET {{baseUrl}}/api/psicologo/citas/hoy
+
+### Todas mis citas
+# @name misCitas
+GET {{baseUrl}}/api/psicologo/citas
+
+### Solo pendientes (solicitudes por aceptar)
+GET {{baseUrl}}/api/psicologo/citas?estado=Pendiente
+
+### Detalle
+GET {{baseUrl}}/api/psicologo/citas/{{citaId}}
+
+### Confirmar (si es virtual crea la sala de videollamada)
+PATCH {{baseUrl}}/api/psicologo/citas/{{citaId}}/estado
+Content-Type: application/json
+
+{
+  "estado": "Confirmada"
+}
+
+### Completar (solo si la cita ya pasó; si es futura da 409)
+PATCH {{baseUrl}}/api/psicologo/citas/{{citaId}}/estado
+Content-Type: application/json
+
+{
+  "estado": "Completada"
+}
+
+### Cancelar
+PATCH {{baseUrl}}/api/psicologo/citas/{{citaId}}/estado
+Content-Type: application/json
+
+{
+  "estado": "Cancelada",
+  "motivo": "No puedo en ese horario"
+}
+
+# ---------- 4.2 Mi perfil (NUEVO) ----------
+
+### Ver mi perfil (datos, especialidades, estudios, experiencia)
+GET {{baseUrl}}/api/psicologo/perfil
+
+### Editar mi perfil
+PATCH {{baseUrl}}/api/psicologo/perfil
+Content-Type: application/json
+
+{
+  "biografia": "Psicóloga clínica con enfoque cognitivo-conductual.",
+  "modalidad": "Ambas",
+  "precioPorHora": 90000,
+  "telefono": "3001234567",
+  "servicioVoluntario": true
+}
+
+### Catálogo de especialidades
+# @name catalogoEsp
+GET {{baseUrl}}/api/psicologo/perfil/especialidades
+
+### Guardar mis especialidades (reemplaza la lista completa)
+PUT {{baseUrl}}/api/psicologo/perfil/especialidades
+Content-Type: application/json
+
+{
+  "especialidadIds": [
+    "{{catalogoEsp.response.body.$.especialidades[0].EspecialidadId}}",
+    "{{catalogoEsp.response.body.$.especialidades[1].EspecialidadId}}"
+  ]
+}
+
+# ---------- 4.3 Mis pacientes e historial (NUEVO) ----------
+
+### Listar mis pacientes (estado: todos | Activa | En seguimiento | Finalizada)
+# @name misPacientes
+GET {{baseUrl}}/api/psicologo/pacientes?estado=todos
+
+### Buscar por nombre
+GET {{baseUrl}}/api/psicologo/pacientes?busqueda=ana
+
+### Historial completo de un paciente
+GET {{baseUrl}}/api/psicologo/pacientes/{{pacienteId}}
+
+### Paciente que no es mío (debe dar 404)
+GET {{baseUrl}}/api/psicologo/pacientes/00000000-0000-4000-8000-000000000000
+
+### Notas de sesión del paciente
+GET {{baseUrl}}/api/psicologo/pacientes/{{pacienteId}}/notas
+
+### Crear nota de sesión (citaId es opcional)
+# @name crearNota
+POST {{baseUrl}}/api/psicologo/pacientes/{{pacienteId}}/notas
+Content-Type: application/json
+
+{
+  "contenido": "El paciente refiere mejoría en el sueño. Continuar con registro emocional.",
+  "citaId": "{{citaId}}"
+}
+
+### Editar nota
+PATCH {{baseUrl}}/api/psicologo/notas/{{crearNota.response.body.$.notaId}}
+Content-Type: application/json
+
+{
+  "contenido": "Nota corregida después de la sesión."
+}
+
+### Eliminar nota
+DELETE {{baseUrl}}/api/psicologo/notas/{{crearNota.response.body.$.notaId}}
+
+# ---------- 4.4 Agenda y disponibilidad (NUEVO) ----------
+
+### Citas del mes (calendario)
+GET {{baseUrl}}/api/psicologo/agenda?mes=2026-10
+
+### Mes con formato malo (debe dar 400)
+GET {{baseUrl}}/api/psicologo/agenda?mes=2026-13
+
+### Ver mi configuración de agenda
+GET {{baseUrl}}/api/psicologo/agenda/configuracion
+
+### Guardar configuración (días SIN tilde: Miercoles, Sabado)
+PUT {{baseUrl}}/api/psicologo/agenda/configuracion
+Content-Type: application/json
+
+{
+  "dias": ["Lunes", "Miercoles", "Viernes"],
+  "horaInicio": "08:00",
+  "horaFin": "17:00",
+  "duracionMinutos": 45,
+  "modalidades": ["Virtual", "Presencial"],
+  "tiposConsulta": ["Terapia individual", "Orientación"],
+  "anticipacionHoras": 12,
+  "cancelacionHoras": 24
+}
+
+### Hora fin antes que inicio (debe dar 400)
+PUT {{baseUrl}}/api/psicologo/agenda/configuracion
+Content-Type: application/json
+
+{
+  "dias": ["Lunes"],
+  "horaInicio": "17:00",
+  "horaFin": "08:00",
+  "duracionMinutos": 45,
+  "modalidades": ["Virtual"],
+  "anticipacionHoras": 12,
+  "cancelacionHoras": 24
+}
+
+# ---------- 4.5 Alertas de riesgo (NUEVO) ----------
+
+### Listar (estado: todas | pendientes | atendidas)
+GET {{baseUrl}}/api/psicologo/alertas?estado=pendientes
+
+### Detalle de una alerta
+GET {{baseUrl}}/api/psicologo/alertas/{{alertaId}}
+
+### Marcar como atendida y registrar la acción tomada
+PATCH {{baseUrl}}/api/psicologo/alertas/{{alertaId}}/atender
+Content-Type: application/json
+
+{
+  "accion": "Se contactó al paciente y se agendó cita prioritaria."
+}
+
+# ---------- 4.6 Cuestionarios para mis pacientes (NUEVO) ----------
+
+### Catálogo de cuestionarios activos + categorías
+GET {{baseUrl}}/api/psicologo/cuestionarios
+
+### Mis asignaciones
+GET {{baseUrl}}/api/psicologo/cuestionarios/asignaciones?estado=todos
+
+### Asignar un cuestionario a un paciente (le llega notificación)
+# @name asignar
+POST {{baseUrl}}/api/psicologo/cuestionarios/asignaciones
+Content-Type: application/json
+
+{
+  "cuestionarioId": "{{cuestionarioId}}",
+  "pacienteId": "{{pacienteId}}",
+  "fechaLimite": "2026-12-01",
+  "nota": "Respóndelo antes de la próxima sesión"
+}
+
+### Asignar el mismo otra vez (debe dar 409: ya tiene uno pendiente)
+POST {{baseUrl}}/api/psicologo/cuestionarios/asignaciones
+Content-Type: application/json
+
+{
+  "cuestionarioId": "{{cuestionarioId}}",
+  "pacienteId": "{{pacienteId}}"
+}
+
+### Cancelar una asignación pendiente
+DELETE {{baseUrl}}/api/psicologo/cuestionarios/asignaciones/{{asignar.response.body.$.asignacionId}}
+
+# ---------- 4.7 Mis finanzas (NUEVO) ----------
+
+### Resumen (neto del mes, comisión, por transferir, transferido)
+GET {{baseUrl}}/api/psicologo/finanzas/resumen
+
+### Movimientos (transferencia: todos | Pendiente | Transferido)
+GET {{baseUrl}}/api/psicologo/finanzas/movimientos?transferencia=todos&pagina=1
+
+### Mis cuentas bancarias (el número sale enmascarado)
+GET {{baseUrl}}/api/psicologo/finanzas/cuentas
+
+### Agregar cuenta
+# @name crearCuenta
+POST {{baseUrl}}/api/psicologo/finanzas/cuentas
+Content-Type: application/json
+
+{
+  "tipoCuenta": "Ahorros",
+  "numeroCuenta": "12345678901",
+  "banco": "Bancolombia",
+  "titularCuenta": "Psicóloga de Prueba",
+  "esPrincipal": true
+}
+
+### Editar cuenta (al cambiar datos vuelve a quedar sin verificar)
+PATCH {{baseUrl}}/api/psicologo/finanzas/cuentas/{{crearCuenta.response.body.$.cuentaId}}
+Content-Type: application/json
+
+{
+  "banco": "Davivienda"
+}
+
+### Eliminar cuenta
+DELETE {{baseUrl}}/api/psicologo/finanzas/cuentas/{{crearCuenta.response.body.$.cuentaId}}
+
+### Mis reclamos de pago
+GET {{baseUrl}}/api/psicologo/finanzas/reclamos
+
+### Crear reclamo (pagoId es opcional)
+POST {{baseUrl}}/api/psicologo/finanzas/reclamos
+Content-Type: application/json
+
+{
+  "motivo": "Pago incompleto",
+  "descripcion": "La transferencia de la semana pasada llegó incompleta.",
+  "pagoId": null
+}
+
+# ---------- 4.8 Ofertas laborales y postulaciones (NUEVO) ----------
+
+### Ofertas activas de empresas verificadas
+GET {{baseUrl}}/api/psicologo/ofertas?modalidad=todas&pagina=1
+
+### Buscar
+GET {{baseUrl}}/api/psicologo/ofertas?busqueda=psic&modalidad=Virtual
+
+### Detalle de una oferta
+GET {{baseUrl}}/api/psicologo/ofertas/{{ofertaId}}
+
+### Postularme (requiere psicólogo verificado; si no, 403)
+POST {{baseUrl}}/api/psicologo/ofertas/{{ofertaId}}/postular
+Content-Type: application/json
+
+{
+  "cartaPresentacion": "Me interesa mucho esta oferta, tengo experiencia en salud mental laboral.",
+  "telefono": "3001234567",
+  "ciudad": "Bogotá",
+  "especialidad": "Psicología clínica",
+  "experienciaAnos": 4,
+  "perfilProfesional": "Psicóloga clínica con 4 años de experiencia en terapia individual y grupal."
+}
+
+### Postularme otra vez (debe dar 409)
+POST {{baseUrl}}/api/psicologo/ofertas/{{ofertaId}}/postular
+Content-Type: application/json
+
+{
+  "cartaPresentacion": "Me interesa mucho esta oferta, tengo experiencia en salud mental laboral.",
+  "telefono": "3001234567",
+  "ciudad": "Bogotá",
+  "especialidad": "Psicología clínica",
+  "experienciaAnos": 4,
+  "perfilProfesional": "Psicóloga clínica con 4 años de experiencia en terapia individual y grupal."
+}
+
+### Mis postulaciones
+GET {{baseUrl}}/api/psicologo/postulaciones
+
+
+#####################################################################
+#  5. PERMISOS (deben fallar)
+#####################################################################
+
+### Paciente intentando entrar a rutas de psicólogo (ejecuta 1.6 antes; 403)
+GET {{baseUrl}}/api/psicologo/pacientes
+
+### Paciente intentando entrar a rutas de admin (403)
+GET {{baseUrl}}/api/admin/configuracion
+
+### Sin sesión (ejecuta 1.9 antes; 401)
+GET {{baseUrl}}/api/psicologo/perfil
+
+
+#####################################################################
+#  6. EXPLORAR (PÚBLICO: no necesita sesión, salvo agendar)
+#####################################################################
+
+### 6.1 Página Explorar: tests, psicólogos y ofertas destacadas
+GET {{baseUrl}}/api/explorar/inicio
+
+### 6.2 Psicólogos verificados (+ especialidades para el filtro)
+# @name explorarPsicologos
+GET {{baseUrl}}/api/explorar/psicologos
+
+### 6.3 Filtrar por modalidad y búsqueda
+GET {{baseUrl}}/api/explorar/psicologos?modalidad=Virtual&busqueda=ansiedad
+
+### 6.4 Perfil público de un psicólogo
+GET {{baseUrl}}/api/explorar/psicologos/{{explorarPsicologos.response.body.$.psicologos[0].id}}
+
+### 6.5 Foto del psicólogo (devuelve la imagen, no JSON)
+GET {{baseUrl}}/api/explorar/psicologos/{{explorarPsicologos.response.body.$.psicologos[0].id}}/foto
+
+### 6.6 Horarios libres de los próximos 14 días
+# @name disponibilidad
+GET {{baseUrl}}/api/explorar/psicologos/{{explorarPsicologos.response.body.$.psicologos[0].id}}/disponibilidad?dias=14
+
+### 6.7 Agendar cita (SOLO PACIENTE: ejecuta 1.6 antes). Usa una fecha y hora del 6.6
+POST {{baseUrl}}/api/explorar/psicologos/{{explorarPsicologos.response.body.$.psicologos[0].id}}/citas
+Content-Type: application/json
+
+{
+  "fecha": "{{disponibilidad.response.body.$.dias[0].fecha}}",
+  "hora": "{{disponibilidad.response.body.$.dias[0].horas[0]}}",
+  "modalidad": "Virtual",
+  "motivo": "Quiero aprender a manejar la ansiedad."
+}
+
+### 6.8 Agendar sin sesión (debe dar 401)
+POST {{baseUrl}}/api/explorar/psicologos/{{explorarPsicologos.response.body.$.psicologos[0].id}}/citas
+Content-Type: application/json
+
+{ "fecha": "2026-12-01", "hora": "09:00", "modalidad": "Virtual" }
+
+### 6.9 Ofertas activas de empresas verificadas
+# @name explorarOfertas
+GET {{baseUrl}}/api/explorar/ofertas?modalidad=todas
+
+### 6.10 Detalle de una oferta (si hay sesión, dice si ya te postulaste)
+GET {{baseUrl}}/api/explorar/ofertas/{{explorarOfertas.response.body.$.ofertas[0].id}}
+
+### 6.11 Logo de la empresa (imagen)
+GET {{baseUrl}}/api/explorar/empresas/{{explorarOfertas.response.body.$.ofertas[0].empresaId}}/logo
+
+### 6.12 Postularse con hoja de vida (SOLO PSICÓLOGO VERIFICADO: ejecuta 1.5 antes)
+POST {{baseUrl}}/api/psicologo/ofertas/{{explorarOfertas.response.body.$.ofertas[0].id}}/postular
+Content-Type: multipart/form-data; boundary=----PsynexBoundary
+
+------PsynexBoundary
+Content-Disposition: form-data; name="cartaPresentacion"
+
+Me interesa mucho esta oferta, tengo experiencia en salud mental laboral.
+------PsynexBoundary
+Content-Disposition: form-data; name="telefono"
+
+3001234567
+------PsynexBoundary
+Content-Disposition: form-data; name="ciudad"
+
+Bogotá
+------PsynexBoundary
+Content-Disposition: form-data; name="especialidad"
+
+Psicología clínica
+------PsynexBoundary
+Content-Disposition: form-data; name="experienciaAnos"
+
+4
+------PsynexBoundary
+Content-Disposition: form-data; name="perfilProfesional"
+
+Psicóloga clínica con 4 años de experiencia en terapia individual y grupal.
+------PsynexBoundary
+Content-Disposition: form-data; name="hojaVida"; filename="hoja-de-vida.pdf"
+Content-Type: application/pdf
+
+< ./pruebas/documento-prueba.pdf
+------PsynexBoundary--
+
+### 6.13 Cuestionarios activos y categorías
+# @name explorarCuestionarios
+GET {{baseUrl}}/api/explorar/cuestionarios
+
+### 6.14 Preguntas y opciones de un cuestionario (sin los puntajes)
+# @name cuestionarioPublico
+GET {{baseUrl}}/api/explorar/cuestionarios/{{explorarCuestionarios.response.body.$.cuestionarios[0].id}}
+
+### 6.15 Enviar respuestas y ver el resultado
+# Debes enviar UNA respuesta por cada pregunta del 6.14 (aquí solo va la
+# primera como ejemplo: con eso responde 400 "Responde todas las preguntas").
+# Si tienes sesión de PACIENTE el resultado se guarda en tu historial.
+POST {{baseUrl}}/api/explorar/cuestionarios/{{explorarCuestionarios.response.body.$.cuestionarios[0].id}}/resultado
+Content-Type: application/json
+
+{
+  "respuestas": [
+    {
+      "preguntaId": "{{cuestionarioPublico.response.body.$.cuestionario.preguntas[0].id}}",
+      "opcionId": "{{cuestionarioPublico.response.body.$.cuestionario.preguntas[0].opciones[0].id}}"
+    }
+  ]
+}

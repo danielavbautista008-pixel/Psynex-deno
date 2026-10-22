@@ -2,7 +2,8 @@ import { conexion } from "../conexion.ts";
 
 // Textos exactos que usa la base de datos. Si en tu aplicación se llaman distinto, cámbialos aquí.
 const ESTADO_CITA_CANCELADA = "Cancelada";
-const ESTADO_PAGO_PAGADO = "Pagado";
+// Mismo valor que usa Finanzas y que exige la base de datos (CK_Pagos_EstadoPago)
+const ESTADO_PAGO_PAGADO = "Completado";
 const TIPOS_CITA = ["Individual", "Empresarial", "Recompensa"] as const;
 
 const MESES_ABREVIADOS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
@@ -93,7 +94,7 @@ export const EstadisticasModel = {
 
     // 4. Ingresos por mes y por tipo de cita (solo pagos pagados y no gratuitos)
     const ingresosRows = await conexion.query(
-      `SELECT DATE_FORMAT(p.FechaPago, '%Y-%m') AS mes, c.TipoCita AS tipo, SUM(p.MontoTotal) AS total
+      `SELECT DATE_FORMAT(p.FechaPago, '%Y-%m') AS mes, p.Origen AS tipo, SUM(p.MontoTotal) AS total
        FROM pagos p
        JOIN citas c ON c.CitaId = p.CitaId
        WHERE p.EstadoPago = ? AND p.EsGratuita = 0

@@ -31,10 +31,12 @@ export interface ResumenCitas {
 // JOINs reutilizables
 const FROM_JOINS = `
   FROM citas c
-  INNER JOIN perfilpaciente pp ON pp.PerfiluId = c.PacienteId
-  INNER JOIN usuarios up ON up.UsuarioId = pp.UsuarioId
-  INNER JOIN perfilpsicologo ppsi ON ppsi.PerfilId = c.PsicologoId
-  INNER JOIN usuarios ups ON ups.UsuarioId = ppsi.UsuarioId
+  -- LEFT JOIN: si al paciente o al psicólogo le falta el usuario, la cita
+  -- igual se muestra (antes se escondía y el admin no la veía).
+  LEFT JOIN perfilpaciente pp ON pp.PerfiluId = c.PacienteId
+  LEFT JOIN usuarios up ON up.UsuarioId = pp.UsuarioId
+  LEFT JOIN perfilpsicologo ppsi ON ppsi.PerfilId = c.PsicologoId
+  LEFT JOIN usuarios ups ON ups.UsuarioId = ppsi.UsuarioId
 `;
 
 const SELECT_CITA = `
@@ -48,11 +50,11 @@ const SELECT_CITA = `
     c.LinkVideollamada,
     c.CreadoEn,
     c.PacienteId,
-    up.NombreCompleto AS PacienteNombre,
-    up.Email AS PacienteEmail,
+    COALESCE(up.NombreCompleto, 'Paciente sin usuario') AS PacienteNombre,
+    COALESCE(up.Email, '') AS PacienteEmail,
     c.PsicologoId,
-    ups.NombreCompleto AS PsicologoNombre,
-    ups.Email AS PsicologoEmail
+    COALESCE(ups.NombreCompleto, 'Psicólogo sin usuario') AS PsicologoNombre,
+    COALESCE(ups.Email, '') AS PsicologoEmail
 `;
 
 export const CitasModel = {
