@@ -1,119 +1,115 @@
-import { conexion } from "../Model/conexion.ts";
+import { conexion } from "../conexion.ts";
 
 export interface OfertaLaboralData {
-    ofertaId?: string | null;
-    perfileId: string;
-    titulo: string;
-    descripcion?: string | null;
-    requisitos?: string | null;
-    salario?: number | null;
-    modalidad?: string | null;
-    estado?: string;
-    fechaPublicacion?: Date | string | null;
+  OfertaId: string | null;
+  PerfileId: string;
+  Titulo: string;
+  Descripcion: string | null;
+  Requisitos: string | null;
+  Salario: number | null;
+  Modalidad?: string | null;
+  Estado: string;
+  FechaPublicacion: Date | string | null;
 }
 
-export class OfertaLaboral {
-    public _ObjOfertaLaboral: OfertaLaboralData | null;
-    public _ofertaId: string | null;
+// Obtener todas las ofertas laborales activas
+export const obtenerTodasOfertas = async () => {
+  const query = `SELECT * FROM ofertaslaborales WHERE estado = 'Activa' ORDER BY fechaPublicacion DESC`;
+  return await conexion.query(query);
+};
 
-    constructor(ObjOfertaLaboral: OfertaLaboralData | null = null, ofertaId: string | null = null) {
-        this._ObjOfertaLaboral = ObjOfertaLaboral;
-        this._ofertaId = ofertaId;
-    }
+// Obtener oferta por ID
+export const obtenerOfertaPorId = async (OfertaId: string) => {
+  const resultado = await conexion.query(
+    "SELECT * FROM ofertaslaborales WHERE OfertaId = ?",
+    [OfertaId]
+  );
+  return resultado[0];
+};
 
-    // Método que ya tenías
-    public async SeleccionarOfertasLaborales(): Promise<OfertaLaboralData[]> {
-        const { rows: ofertas } = await conexion.execute(`SELECT * FROM "OfertasLaborales" WHERE "Estado" = 'Activa'`);
-        return ofertas as OfertaLaboralData[];
-    }
+// Obtener ofertas por ID de Empresa (Perfil)
+export const obtenerOfertasPorEmpresa = async (PerfileId: string) => {
+  const query = `SELECT * FROM ofertaslaborales WHERE PerfileId = ? AND Estado = 'Activa' ORDER BY FechaPublicacion DESC`;
+  return await conexion.query(query, [PerfileId]);
+};
 
-    public async SeleccionarPorId(id: string): Promise<OfertaLaboralData | null> {
-        const { rows: ofertas } = await conexion.execute(
-            `SELECT * FROM "OfertasLaborales" WHERE "OfertaId" = $1`,
-            [id]
-        );
-        return ofertas.length > 0 ? (ofertas[0] as OfertaLaboralData) : null;
-    }
+// Contar ofertas activas por empresa
+export const contarOfertasActivasPorEmpresa = async (PerfileId: string) => {
+  const resultado = await conexion.query(
+    "SELECT COUNT(*) AS total FROM ofertaslaborales WHERE PerfileId = ? AND Estado = 'Activa'",
+    [PerfileId]
+  );
+  return Number(resultado[0]?.total ?? 0);
+};
 
-    public async SeleccionarPorEmpresa(perfileId: string): Promise<OfertaLaboralData[]> {
-        const { rows: ofertas } = await conexion.execute(
-            `SELECT * FROM "OfertasLaborales" WHERE "PerfileId" = $1 AND "Estado" = 'Activa'`,
-            [perfileId]
-        );
-        return ofertas as OfertaLaboralData[];
-    }
+// Obtener ofertas públicas destacadas (Límite 3)
+export const obtenerOfertasPublicas = async () => {
+  const query = `SELECT * FROM ofertaslaborales WHERE Estado = 'Activa' ORDER BY FechaPublicacion DESC LIMIT 3`;
+  return await conexion.query(query);
+};
 
-    public async ContarOfertasActivasPorEmpresa(perfileId: string): Promise<number> {
-        const { rows } = await conexion.execute(
-            `SELECT COUNT(*) as total FROM "OfertasLaborales" WHERE "PerfileId" = $1 AND "Estado" = 'Activa'`,
-            [perfileId]
-        );
-        return Number(rows[0]?.total ?? 0);
-    }
+// Crear nueva oferta laboral
+export const crearOfertaModel = async (oferta: OfertaLaboralData) => {
+  const id = oferta.OfertaId || crypto.randomUUID();
+  const fecha = oferta.FechaPublicacion || new Date().toISOString();
+  const estado = oferta.Estado || "Activa";
 
-    public async SeleccionarPublicas(): Promise<OfertaLaboralData[]> {
-        const { rows: ofertas } = await conexion.execute(
-            `SELECT * FROM "OfertasLaborales" WHERE "Estado" = 'Activa' LIMIT 3`
-        );
-        return ofertas as OfertaLaboralData[];
-    }
+  await conexion.execute(
+    `INSERT INTO ofertaslaborales 
+     (OfertaId, PerfileId, Titulo, Descripcion, Requisitos, Salario, Modalidad, Estado, FechaPublicacion)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      oferta.PerfileId,
+      oferta.Titulo,
+      oferta.Descripcion || null,
+      oferta.Requisitos || null,
+      oferta.Salario || null,
+      oferta.Modalidad || null,
+      estado,
+      fecha,
+    ]
+  );
 
-    public async InsertarOferta(datos: OfertaLaboralData): Promise<OfertaLaboralData> {
-        const id = datos.ofertaId || crypto.randomUUID();
-        const fecha = datos.fechaPublicacion || new Date().toISOString();
-        const estado = datos.estado || "Activa";
+  return id;
+};
 
-        await conexion.execute(
-            `INSERT INTO "OfertasLaborales" 
-             ("OfertaId", "PerfileId", "Titulo", "Descripcion", "Requisitos", "Salario", "Modalidad", "Estado", "FechaPublicacion")
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-            [
-                id,
-                datos.perfileId,
-                datos.titulo,
-                datos.descripcion ?? null,
-                datos.requisitos ?? null,
-                datos.salario ?? null,
-                datos.modalidad ?? null,
-                estado,
-                fecha
-            ]
-        );
+// Actualizar una oferta existente
+export const actualizarOfertaModel = async (
+  id: string,
+  oferta: Partial<OfertaLaboralData>
+) => {
+  const { Titulo, Descripcion, Requisitos, Salario, Modalidad } = oferta;
 
-        return {
-            ...datos,
-            ofertaId: id,
-            estado,
-            fechaPublicacion: fecha
-        };
-    }
+  await conexion.execute(
+    `UPDATE ofertaslaborales 
+     SET Titulo = ?, Descripcion = ?, Requisitos = ?, Salario = ?, Modalidad = ?
+     WHERE OfertaId = ?`,
+    [
+      Titulo,
+      Descripcion || null,
+      Requisitos || null,
+      Salario || null,
+      Modalidad || null,
+      id,
+    ]
+  );
+  return true;
+};
 
-    public async ActualizarOferta(id: string, datos: Partial<OfertaLaboralData>): Promise<boolean> {
-        const result = await conexion.execute(
-            `UPDATE "OfertasLaborales" 
-             SET "Titulo" = $1, 
-                 "Descripcion" = $2, 
-                 "Requisitos" = $3, 
-                 "Salario" = $4, 
-                 "Modalidad" = $5
-             WHERE "OfertaId" = $6`,
-            [
-                datos.titulo,
-                datos.descripcion ?? null,
-                datos.requisitos ?? null,
-                datos.salario ?? null,
-                datos.modalidad ?? null,
-                id
-            ]
-        );
-        return (result.affectedRows ?? 0) > 0;
-    }
+// Eliminar / Desactivar oferta (Cambio de estado a 'Cerrada')
+export const desactivarOfertaModel = async (id: string) => {
+  await conexion.execute(
+    `UPDATE ofertaslaborales SET estado = 'Cerrada' WHERE OfertaId = ?`,
+    [id]
+  );
+  return true;
+};
 
-    public async DesactivarOferta(id: string): Promise<boolean> {
-        const result = await conexion.execute(
-            `UPDATE "OfertasLaborales" SET "Estado" = 'Cerrada' WHERE "OfertaId" = $1`,
-            [id]
-        );
-        return (result.affectedRows ?? 0) > 0;
-    }
-}
+// Eliminar físicamente una oferta
+export const eliminarOfertaModel = async (id: string) => {
+  await conexion.execute("DELETE FROM ofertaslaborales WHERE OfertaId = ?", [
+    id,
+  ]);
+  return true;
+};

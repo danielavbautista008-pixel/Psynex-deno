@@ -1,158 +1,254 @@
-import { Context } from "../Dependencies/dependencias.ts";
-import { Postulacion, PostulacionData } from "../Model/postulacionModel.ts";
+import { Context } from "https://deno.land/x/oak/mod.ts";
+import {
+  actualizarPostulacionModel,
+  contarPostulacionesPorEmpresaYEstado,
+  contarPostulacionesPorUsuarioYEstado,
+  crearPostulacionModel,
+  eliminarPostulacionModel,
+  existePostulacionModel,
+  obtenerPostulacionPorId,
+  obtenerPostulacionesPorEmpresa,
+  obtenerPostulacionesPorUsuario,
+} from "../../Model/Empresa/postulacionesModel.ts";
 
-// GET /postulaciones/usuario/:usuarioId
-export const getPorUsuario = async (ctx: Context) => {
-    const { response, params } = ctx;
-    try {
-        const ObjPostulacion = new Postulacion();
-        const lista = await ObjPostulacion.SeleccionarPorUsuario(params.usuarioId!);
-        response.status = 200;
-        response.body = {
-            success: true,
-            data: lista,
-        };
-    } catch (error) {
-        response.status = 400;
-        response.body = {
-            success: false,
-            message: "error al procesar la solicitud",
-            errors: error,
-        };
+// Obtener postulación por ID
+export const getPostulacionById = async (ctx: Context) => {
+  try {
+    // @ts-ignore
+    const { id } = ctx.params;
+    const postulacion = await obtenerPostulacionPorId(id);
+
+    if (!postulacion) {
+      ctx.response.status = 404;
+      ctx.response.body = {
+        success: false,
+        message: "Postulación no encontrada",
+      };
+      return;
     }
+
+    ctx.response.status = 200;
+    ctx.response.body = { success: true, data: postulacion };
+  } catch (error) {
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al buscar la postulación",
+      error: String(error),
+    };
+  }
 };
 
-// GET /postulaciones/empresa/:perfileId
-export const getPorEmpresa = async (ctx: Context) => {
-    const { response, params } = ctx;
-    try {
-        const ObjPostulacion = new Postulacion();
-        const lista = await ObjPostulacion.SeleccionarPorEmpresa(params.perfileId!);
-        response.status = 200;
-        response.body = {
-            success: true,
-            data: lista,
-        };
-    } catch (error) {
-        response.status = 400;
-        response.body = {
-            success: false,
-            message: "error al procesar la solicitud",
-            errors: error,
-        };
-    }
+// Obtener postulaciones realizadas por un usuario
+export const getPostulacionesPorUsuario = async (ctx: Context) => {
+  try {
+    // @ts-ignore
+    const { usuarioId } = ctx.params;
+    const postulaciones = await obtenerPostulacionesPorUsuario(usuarioId);
+
+    ctx.response.status = 200;
+    ctx.response.body = { success: true, data: postulaciones };
+  } catch (error) {
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al obtener las postulaciones del usuario",
+      error: String(error),
+    };
+  }
 };
 
-// POST /postulaciones
-export const postularse = async (ctx: Context) => {
-    const { request, response } = ctx;
-    try {
-        const body = request.body();
-        const dto: PostulacionData = await body.value;
+// Obtener postulaciones recibidas por una empresa (PerfilId)
+export const getPostulacionesPorEmpresa = async (ctx: Context) => {
+  try {
+    // @ts-ignore
+    const { perfileId } = ctx.params;
+    const postulaciones = await obtenerPostulacionesPorEmpresa(perfileId);
 
-        if (!dto || !dto.ofertaId || !dto.usuarioId) {
-            response.status = 400;
-            response.body = {
-                success: false,
-                message: "Datos de postulación no válidos.",
-            };
-            return;
-        }
-
-        const ObjPostulacion = new Postulacion();
-
-        const yaExiste = await ObjPostulacion.ExistePostulacion(dto.ofertaId, dto.usuarioId);
-        if (yaExiste) {
-            response.status = 400;
-            response.body = {
-                success: false,
-                message: "Ya te has postulado previamente a esta oferta laboral.",
-            };
-            return;
-        }
-
-        const nuevaPostulacion = await ObjPostulacion.InsertarPostulacion(dto);
-
-        response.status = 200;
-        response.body = {
-            success: true,
-            data: nuevaPostulacion,
-        };
-    } catch (error) {
-        response.status = 400;
-        response.body = {
-            success: false,
-            message: "error al procesar la solicitud",
-            errors: error,
-        };
-    }
+    ctx.response.status = 200;
+    ctx.response.body = { success: true, data: postulaciones };
+  } catch (error) {
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al obtener las postulaciones recibidas por la empresa",
+      error: String(error),
+    };
+  }
 };
 
-// PUT /postulaciones/:id
+// Crear nueva postulación
+export const postPostulacion = async (ctx: Context) => {
+  try {
+    const body = await ctx.request.body.json();
+    const usuarioLogueado = ctx.state.user;
+
+    const usuarioId = usuarioLogueado?.sub || body.UsuarioId;
+
+    if (!body.OfertaId || !usuarioId) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "Faltan campos obligatorios (OfertaId, UsuarioId)",
+      };
+      return;
+    }
+
+    // Validar si el usuario ya se postuló previamente a esta oferta
+    const yaExiste = await existePostulacionModel(body.OfertaId, usuarioId);
+    if (yaExiste) {
+      ctx.response.status = 409; // Conflict
+      ctx.response.body = {
+        success: false,
+        message: "El usuario ya se encuentra postulado a esta oferta laboral",
+      };
+      return;
+    }
+
+    const nuevaPostulacion = {
+      PostulacionId: body.PostulacionId || crypto.randomUUID(),
+      ...body,
+      UsuarioId: usuarioId,
+      Estado: body.Estado || "Pendiente",
+    };
+
+    const resultado = await crearPostulacionModel(nuevaPostulacion);
+
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: "Postulación registrada exitosamente",
+      PostulacionId: nuevaPostulacion.PostulacionId,
+    };
+  } catch (error) {
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al crear la postulación",
+      error: String(error),
+    };
+  }
+};
+
+// Actualizar información o estado de una postulación
 export const putPostulacion = async (ctx: Context) => {
-    const { request, response, params } = ctx;
-    try {
-        const body = request.body();
-        const dto: Partial<PostulacionData> = await body.value;
+  try {
+    // @ts-ignore
+    const { id } = ctx.params;
+    const body = await ctx.request.body.json();
 
-        const ObjPostulacion = new Postulacion();
-        const existente = await ObjPostulacion.SeleccionarPorId(params.id!);
-
-        if (!existente) {
-            response.status = 404;
-            response.body = {
-                success: false,
-                message: "Postulación no encontrada",
-            };
-            return;
-        }
-
-        await ObjPostulacion.ActualizarPostulacion(params.id!, dto);
-
-        response.status = 200;
-        response.body = {
-            success: true,
-            message: "Postulación actualizada exitosamente",
-        };
-    } catch (error) {
-        response.status = 400;
-        response.body = {
-            success: false,
-            message: "error al procesar la solicitud",
-            errors: error,
-        };
+    const existe = await obtenerPostulacionPorId(id);
+    if (!existe) {
+      ctx.response.status = 404;
+      ctx.response.body = {
+        success: false,
+        message: "La postulación no existe",
+      };
+      return;
     }
+
+    await actualizarPostulacionModel(id, body);
+
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: "Postulación actualizada correctamente",
+    };
+  } catch (error) {
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al actualizar la postulación",
+      error: String(error),
+    };
+  }
 };
 
-// DELETE /postulaciones/:id
+// Eliminar postulación
 export const deletePostulacion = async (ctx: Context) => {
-    const { response, params } = ctx;
-    try {
-        const ObjPostulacion = new Postulacion();
-        const existente = await ObjPostulacion.SeleccionarPorId(params.id!);
+  try {
+    // @ts-ignore
+    const { id } = ctx.params;
 
-        if (!existente) {
-            response.status = 404;
-            response.body = {
-                success: false,
-                message: "Postulación no encontrada",
-            };
-            return;
-        }
-
-        await ObjPostulacion.EliminarPostulacion(params.id!);
-
-        response.status = 200;
-        response.body = {
-            success: true,
-            message: "Postulación eliminada exitosamente",
-        };
-    } catch (error) {
-        response.status = 400;
-        response.body = {
-            success: false,
-            message: "error al procesar la solicitud",
-            errors: error,
-        };
+    if (!id) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "Falta el ID de la postulación",
+      };
+      return;
     }
+
+    const existe = await obtenerPostulacionPorId(id);
+    if (!existe) {
+      ctx.response.status = 404;
+      ctx.response.body = {
+        success: false,
+        message: "La postulación no existe",
+      };
+      return;
+    }
+
+    await eliminarPostulacionModel(id);
+
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: "Postulación eliminada correctamente",
+    };
+  } catch (error) {
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al eliminar la postulación: " + String(error),
+    };
+  }
 };
+
+//contar postulaciones por empresa
+// export const contarPostulacionesPorEmpresa = async (ctx: Context) => {
+//   try {
+//     // @ts-ignore
+//     const { perfileId } = ctx.params;
+//     const { estado } = ctx.request.url.searchParams;
+
+//     const total = await contarPostulacionesPorEmpresaYEstado(perfileId, estado);
+//     ctx.response.status = 200;
+//     ctx.response.body = {
+//       success: true,
+//       message: "Total de postulaciones contadas",
+//       total,
+//     };
+//   } catch (error) {
+//     ctx.response.status = 500;
+//     ctx.response.body = {
+//       success: false,
+//       message: "Error al contar las postulaciones",
+//       error: String(error),
+//     };
+//   }
+// };
+
+// contarpostulaciones por usuario y estado
+// export const contarPostulacionesPorUsuario = async (ctx: Context) => {
+//   try {
+//     // @ts-ignore
+//     const { usuarioId } = ctx.params;
+//     const { Estado } = ctx.request.url.searchParams;
+
+//     const total = await contarPostulacionesPorUsuarioYEstado(usuarioId, Estado);
+//     ctx.response.status = 200;
+//     ctx.response.body = {
+//       success: true,
+//       message: "Total de postulaciones contadas",
+//       total,
+//     };
+//   } catch (error) {
+//     ctx.response.status = 500;
+//     ctx.response.body = {
+//       success: false,
+//       message: "Error al contar las postulaciones",
+//       error: String(error),
+//     };
+//   }
+// };

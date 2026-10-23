@@ -1,188 +1,253 @@
-import { Context } from "../Dependencies/dependencias.ts";
-import { OfertaLaboral, OfertaLaboralData } from "../Model/ofertaLaboralModel.ts";
+import { Context } from "https://deno.land/x/oak/mod.ts";
+import {
+  actualizarOfertaModel,
+  contarOfertasActivasPorEmpresa,
+  crearOfertaModel,
+  desactivarOfertaModel,
+  eliminarOfertaModel,
+  obtenerOfertaPorId,
+  obtenerOfertasPorEmpresa,
+  obtenerOfertasPublicas,
+  obtenerTodasOfertas,
+} from "../../Model/Empresa/ofertaModel.ts";
 
-// GET /ofertaslaborales
+// Listar todas las ofertas activas
 export const getOfertas = async (ctx: Context) => {
-    const { response } = ctx;
-    try {
-        const ObjOferta = new OfertaLaboral();
-        const listaOfertas = await ObjOferta.SeleccionarOfertasLaborales();
-        response.status = 200;
-        response.body = {
-            success: true,
-            data: listaOfertas,
-        };
-    } catch (error) {
-        response.status = 400;
-        response.body = {
-            success: false,
-            message: "error al procesar la solicitud",
-            errors: error,
-        };
-    }
+  try {
+    const ofertas = await obtenerTodasOfertas();
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      data: ofertas,
+    };
+  } catch (error) {
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al obtener la lista de ofertas laborales",
+      error: String(error),
+    };
+  }
 };
 
-// GET /ofertaslaborales/empresa/:perfileId
-export const getOfertasPorEmpresa = async (ctx: Context) => {
-    const { response, params } = ctx;
-    try {
-        const ObjOferta = new OfertaLaboral();
-        const ofertas = await ObjOferta.SeleccionarPorEmpresa(params.perfileId!);
-        response.status = 200;
-        response.body = {
-            success: true,
-            data: ofertas,
-        };
-    } catch (error) {
-        response.status = 400;
-        response.body = {
-            success: false,
-            message: "error al procesar la solicitud",
-            errors: error,
-        };
+// Obtener una sola oferta por su ID
+export const getOfertaById = async (ctx: Context) => {
+  try {
+    // @ts-ignore
+    const { OfertaId } = ctx.params;
+    const oferta = await obtenerOfertaPorId(OfertaId);
+
+    if (!oferta) {
+      ctx.response.status = 404;
+      ctx.response.body = {
+        success: false,
+        message: "Oferta laboral no encontrada",
+      };
+      return;
     }
+
+    ctx.response.status = 200;
+    ctx.response.body = { success: true, data: oferta };
+  } catch (error) {
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al buscar la oferta laboral",
+      error: String(error),
+    };
+  }
 };
 
-// GET /ofertaslaborales/empresa/:perfileId/contar
-export const contarOfertasActivasPorEmpresa = async (ctx: Context) => {
-    const { response, params } = ctx;
-    try {
-        const ObjOferta = new OfertaLaboral();
-        const conteo = await ObjOferta.ContarOfertasActivasPorEmpresa(params.perfileId!);
-        response.status = 200;
-        response.body = {
-            success: true,
-            data: conteo,
-        };
-    } catch (error) {
-        response.status = 400;
-        response.body = {
-            success: false,
-            message: "error al procesar la solicitud",
-            errors: error,
-        };
-    }
+// Obtener ofertas por ID de empresa (Perfil)
+export const getOfertasByEmpresa = async (ctx: Context) => {
+  try {
+    // @ts-ignore
+    const { PerfileId } = ctx.params;
+    const ofertas = await obtenerOfertasPorEmpresa(PerfileId);
+
+    ctx.response.status = 200;
+    ctx.response.body = { success: true, data: ofertas };
+  } catch (error) {
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al obtener ofertas de la empresa",
+      error: String(error),
+    };
+  }
 };
 
-// GET /ofertaslaborales/publicos
-export const getPublicos = async (ctx: Context) => {
-    const { response } = ctx;
-    try {
-        const ObjOferta = new OfertaLaboral();
-        const ofertas = await ObjOferta.SeleccionarPublicas();
-        response.status = 200;
-        response.body = {
-            success: true,
-            data: ofertas,
-        };
-    } catch (error) {
-        response.status = 400;
-        response.body = {
-            success: false,
-            message: "error al procesar la solicitud",
-            errors: error,
-        };
-    }
+// Contar ofertas activas de una empresa
+export const getContarOfertasEmpresa = async (ctx: Context) => {
+  try {
+    // @ts-ignore
+    const { PerfileId } = ctx.params;
+    const total = await contarOfertasActivasPorEmpresa(PerfileId);
+
+    ctx.response.status = 200;
+    ctx.response.body = { success: true, total };
+  } catch (error) {
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al contar las ofertas de la empresa",
+      error: String(error),
+    };
+  }
 };
 
-// POST /ofertaslaborales
+// Obtener ofertas destacadas públicas (Límite 3)
+export const getOfertasPublicas = async (ctx: Context) => {
+  try {
+    const ofertas = await obtenerOfertasPublicas();
+    ctx.response.status = 200;
+    ctx.response.body = { success: true, data: ofertas };
+  } catch (error) {
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al obtener las ofertas públicas",
+      error: String(error),
+    };
+  }
+};
+
+// Crear nueva oferta laboral
 export const postOferta = async (ctx: Context) => {
-    const { request, response } = ctx;
-    try {
-        const body = request.body();
-        const dto: OfertaLaboralData = await body.value;
+  try {
+    const body = await ctx.request.body.json();
 
-        const ObjOferta = new OfertaLaboral();
-        const nuevaOferta = await ObjOferta.InsertarOferta(dto);
-
-        response.status = 200;
-        response.body = {
-            success: true,
-            data: nuevaOferta,
-        };
-    } catch (error) {
-        response.status = 400;
-        response.body = {
-            success: false,
-            message: "error al procesar la solicitud",
-            errors: error,
-        };
+    if (!body.PerfileId || !body.Titulo) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "Faltan campos obligatorios para registrar la oferta (PerfileId, Titulo)",
+      };
+      return;
     }
+
+    const idCreado = await crearOfertaModel(body);
+
+    ctx.response.status = 201;
+    ctx.response.body = {
+      success: true,
+      message: "Oferta laboral creada exitosamente",
+      ofertaId: idCreado,
+    };
+  } catch (error) {
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al crear la oferta laboral",
+      error: String(error),
+    };
+  }
 };
 
-// PUT /ofertaslaborales/:id
+// Actualizar oferta laboral
 export const putOferta = async (ctx: Context) => {
-    const { request, response, params } = ctx;
-    try {
-        const body = request.body();
-        const dto: OfertaLaboralData = await body.value;
+  try {
+    // @ts-ignore
+    const { OfertaId } = ctx.params;
+    const body = await ctx.request.body.json();
 
-        const ObjOferta = new OfertaLaboral();
-        const ofertaExistente = await ObjOferta.SeleccionarPorId(params.id!);
-
-        if (!ofertaExistente) {
-            response.status = 404;
-            response.body = {
-                success: false,
-                message: "Oferta no encontrada",
-            };
-            return;
-        }
-
-        const actualizado = await ObjOferta.ActualizarOferta(params.id!, dto);
-
-        if (actualizado) {
-            response.status = 200;
-            response.body = {
-                success: true,
-                message: "Oferta actualizada exitosamente",
-            };
-        } else {
-            response.status = 400;
-            response.body = {
-                success: false,
-                message: "Error de concurrencia al actualizar la oferta",
-            };
-        }
-    } catch (error) {
-        response.status = 400;
-        response.body = {
-            success: false,
-            message: "error al procesar la solicitud",
-            errors: error,
-        };
+    const existe = await obtenerOfertaPorId(OfertaId);
+    if (!existe) {
+      ctx.response.status = 404;
+      ctx.response.body = {
+        success: false,
+        message: "La oferta laboral no existe",
+      };
+      return;
     }
+
+    await actualizarOfertaModel(OfertaId, body);
+
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: "Oferta laboral actualizada correctamente",
+    };
+  } catch (error) {
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al actualizar la oferta laboral",
+      error: String(error),
+    };
+  }
 };
 
-// DELETE /ofertaslaborales/:id
-export const deleteOferta = async (ctx: Context) => {
-    const { response, params } = ctx;
-    try {
-        const ObjOferta = new OfertaLaboral();
-        const ofertaExistente = await ObjOferta.SeleccionarPorId(params.id!);
+// Desactivar o Cerrar oferta laboral
+export const patchDesactivarOferta = async (ctx: Context) => {
+  try {
+    // @ts-ignore
+    const { OfertaId } = ctx.params;
 
-        if (!ofertaExistente) {
-            response.status = 404;
-            response.body = {
-                success: false,
-                message: "Oferta no encontrada",
-            };
-            return;
-        }
-
-        await ObjOferta.DesactivarOferta(params.id!);
-
-        response.status = 200;
-        response.body = {
-            success: true,
-            message: "Oferta desactivada exitosamente",
-        };
-    } catch (error) {
-        response.status = 400;
-        response.body = {
-            success: false,
-            message: "error al procesar la solicitud",
-            errors: error,
-        };
+    const existe = await obtenerOfertaPorId(OfertaId);
+    if (!existe) {
+      ctx.response.status = 404;
+      ctx.response.body = {
+        success: false,
+        message: "La oferta laboral no existe",
+      };
+      return;
     }
+
+    await desactivarOfertaModel(OfertaId);
+
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: "Oferta laboral cerrada exitosamente",
+    };
+  } catch (error) {
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al cerrar la oferta laboral",
+      error: String(error),
+    };
+  }
+};
+
+// Eliminar definitivamente oferta laboral
+export const deleteOferta = async (ctx: Context) => {
+  try {
+    // @ts-ignore
+    const { OfertaId } = ctx.params;
+
+    if (!OfertaId) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "Falta el ID de la oferta",
+      };
+      return;
+    }
+
+    const existe = await obtenerOfertaPorId(OfertaId);
+    if (!existe) {
+      ctx.response.status = 404;
+      ctx.response.body = {
+        success: false,
+        message: "La oferta laboral no existe",
+      };
+      return;
+    }
+
+    await eliminarOfertaModel(OfertaId);
+
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: "Oferta laboral eliminada correctamente",
+    };
+  } catch (error) {
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error interno en el servidor: " + String(error),
+    };
+  }
 };

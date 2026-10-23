@@ -1,146 +1,197 @@
-import { Context } from "../Dependencies/dependencias.ts";
-import { PerfilEmpresa } from "../Model/perfilEmpresaModel.ts";
+import { Context } from "https://deno.land/x/oak/mod.ts";
+import {
+  actualizarPerfilEmpresaModel,
+  crearPerfilEmpresaModel,
+  eliminarPerfilEmpresaModel,
+  obtenerPerfilEmpresaPorId,
+  obtenerPerfilEmpresaPorUsuarioId,
+  obtenerTodosPerfilesEmpresa,
+} from "../../Model/Empresa/perfilModel.ts";
 
+// Listar todos los perfiles
 export const getPerfilEmpresa = async (ctx: Context) => {
-    const { response } = ctx;
-
-    try {
-        const ObjPerfil = new PerfilEmpresa();
-        const ListaPerfiles = await ObjPerfil.SeleccionarPerfilesEmpresa();
-        response.status = 200;
-        response.body = {
-            success: true,
-            data: ListaPerfiles,
-        };
-    } catch (error) {
-        response.status = 400;
-        response.body = {
-            success: false,
-            message: "error al procesar la solicitud",
-            errors: error,
-        };
-    }
+  try {
+    const perfiles = await obtenerTodosPerfilesEmpresa();
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      data: perfiles,
+    };
+  } catch (error) {
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al obtener los perfiles de empresa",
+      error: String(error),
+    };
+  }
 };
 
+// Obtener un perfil por ID
 export const getPerfilEmpresaPorId = async (ctx: Context) => {
-    const { response, params } = ctx;
+  try {
+    // @ts-ignore (Oak extrae params de la ruta)
+    const { PerfileId } = ctx.params;
+    const perfil = await obtenerPerfilEmpresaPorId(PerfileId);
 
-    try {
-        const ObjPerfil = new PerfilEmpresa();
-        const perfil = await ObjPerfil.SeleccionarPorId(params.id!);
-
-        if (!perfil) {
-            response.status = 404;
-            response.body = {
-                success: false,
-                message: `No se encontró el perfil de empresa con ID ${params.id}`,
-            };
-            return;
-        }
-
-        response.status = 200;
-        response.body = {
-            success: true,
-            data: perfil,
-        };
-    } catch (error) {
-        response.status = 400;
-        response.body = {
-            success: false,
-            message: "error al procesar la solicitud",
-            errors: error,
-        };
+    if (!perfil) {
+      ctx.response.status = 404;
+      ctx.response.body = {
+        success: false,
+        message: `No se encontró el perfil de empresa con ID ${PerfileId}`,
+      };
+      return;
     }
+
+    ctx.response.status = 200;
+    ctx.response.body = { success: true, data: perfil };
+  } catch (error) {
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al buscar el perfil de empresa",
+      error: String(error),
+    };
+  }
 };
 
+// Obtener perfil por ID de Usuario
 export const getPerfilEmpresaPorUsuarioId = async (ctx: Context) => {
-    const { response, params } = ctx;
+  try {
+    // @ts-ignore
+    const { usuarioId } = ctx.params;
+    const perfil = await obtenerPerfilEmpresaPorUsuarioId(usuarioId);
 
-    try {
-        const ObjPerfil = new PerfilEmpresa();
-        const perfil = await ObjPerfil.SeleccionarPorUsuarioId(params.usuarioId!);
-
-        if (!perfil) {
-            response.status = 404;
-            response.body = {
-                success: false,
-                message: `No se encontró un perfil de empresa asociado al usuario con ID ${params.usuarioId}`,
-            };
-            return;
-        }
-
-        response.status = 200;
-        response.body = {
-            success: true,
-            data: perfil,
-        };
-    } catch (error) {
-        response.status = 400;
-        response.body = {
-            success: false,
-            message: "error al procesar la solicitud",
-            errors: error,
-        };
+    if (!perfil) {
+      ctx.response.status = 404;
+      ctx.response.body = {
+        success: false,
+        message: `No se encontró el perfil para el usuario con ID ${usuarioId}`,
+      };
+      return;
     }
+
+    ctx.response.status = 200;
+    ctx.response.body = { success: true, data: perfil };
+  } catch (error) {
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al buscar el perfil del usuario",
+      error: String(error),
+    };
+  }
 };
 
-export const putPerfilEmpresa = async (ctx: Context) => {
-    const { request, response, params } = ctx;
-
-    try {
-        const body = request.body();
-        const datos = await body.value;
-
-        if (datos.perfileId && params.id !== datos.perfileId) {
-            response.status = 400;
-            response.body = {
-                success: false,
-                message: "El ID proporcionado en la URL no coincide con el ID de la empresa enviada.",
-            };
-            return;
-        }
-
-        const ObjPerfil = new PerfilEmpresa();
-        const perfilExistente = await ObjPerfil.SeleccionarPorId(params.id!);
-
-        if (!perfilExistente) {
-            response.status = 404;
-            response.body = {
-                success: false,
-                message: `No se encontró el perfil de empresa con ID ${params.id} para actualizar.`,
-            };
-            return;
-        }
-
-        const actualizado = await ObjPerfil.ActualizarPerfilEmpresa(params.id!, datos);
-
-        if (actualizado) {
-            response.status = 200;
-            response.body = {
-                success: true,
-                message: "Perfil de empresa actualizado correctamente",
-            };
-        } else {
-            response.status = 404;
-            response.body = {
-                success: false,
-                message: "La empresa ya no existe en el sistema.",
-            };
-        }
-    } catch (error) {
-        response.status = 400;
-        response.body = {
-            success: false,
-            message: "error al procesar la solicitud",
-            errors: error,
-        };
-    }
-};
-
+// Crear perfil de empresa
 export const postPerfilEmpresa = async (ctx: Context) => {
-    const { response } = ctx;
+  try {
+    const body = await ctx.request.body.json();
+    const usuarioLogueado = ctx.state.user; // Usuario obtenido desde JWT
+
+    if (!body.NombreEmpresa || !body.Nit) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "Faltan campos obligatorios (NombreEmpresa, Nit)",
+      };
+      return;
+    }
+
+    const nuevoPerfil = {
+      ...body,
+      UsuarioId: usuarioLogueado?.sub || body.UsuarioId,
+    };
+
+    const idCreado = await crearPerfilEmpresaModel(nuevoPerfil);
+
+    ctx.response.status = 201;
+    ctx.response.body = {
+      success: true,
+      message: "Perfil de empresa creado exitosamente",
+      PerfileId: idCreado,
+    };
+  } catch (error) {
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al crear el perfil de empresa",
+      error: String(error),
+    };
+  }
 };
 
+// Actualizar perfil de empresa
+export const putPerfilEmpresa = async (ctx: Context) => {
+  try {
+    // @ts-ignore
+    const { id } = ctx.params;
+    const body = await ctx.request.body.json();
+
+    const existe = await obtenerPerfilEmpresaPorId(id);
+    if (!existe) {
+      ctx.response.status = 404;
+      ctx.response.body = {
+        success: false,
+        message: "El perfil de empresa no existe",
+      };
+      return;
+    }
+
+    await actualizarPerfilEmpresaModel(id, body);
+
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: "Perfil de empresa actualizado correctamente",
+    };
+  } catch (error) {
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al actualizar el perfil de empresa",
+      error: String(error),
+    };
+  }
+};
+
+// Eliminar perfil de empresa
 export const deletePerfilEmpresa = async (ctx: Context) => {
-    const { response } = ctx;
+  try {
+    // @ts-ignore
+    const { id } = ctx.params;
+
+    if (!id) {
+      ctx.response.status = 400;
+      ctx.response.body = {
+        success: false,
+        message: "Falta el ID del perfil de empresa",
+      };
+      return;
+    }
+
+    const existe = await obtenerPerfilEmpresaPorId(id);
+    if (!existe) {
+      ctx.response.status = 404;
+      ctx.response.body = {
+        success: false,
+        message: "El perfil de empresa no existe",
+      };
+      return;
+    }
+
+    await eliminarPerfilEmpresaModel(id);
+
+    ctx.response.status = 200;
+    ctx.response.body = {
+      success: true,
+      message: "Perfil de empresa eliminado correctamente",
+    };
+  } catch (error) {
+    ctx.response.status = 500;
+    ctx.response.body = {
+      success: false,
+      message: "Error al eliminar el perfil de empresa: " + String(error),
+    };
+  }
 };
