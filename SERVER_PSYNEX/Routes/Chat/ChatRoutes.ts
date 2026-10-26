@@ -2,7 +2,7 @@ import { Router } from "../../Dependencies/dependencias.ts";
 import { requireAuth } from "../../Middlewares/RequireAuth.ts";
 import { ChatController } from "../../Controller/Chat/ChatController.ts";
 
-// Chat entre psicólogo y paciente. Todas las rutas necesitan sesión
+// Chat entre psicólogo y paciente, y entre empresa y sus postulados. Todas las rutas necesitan sesión
 // (la cookie "token"); el controlador revisa que el usuario sea parte
 // de la conversación que pide.
 const router = new Router({ prefix: "/api/chat" });
@@ -17,5 +17,8 @@ router.patch("/conversaciones/:id/estado", requireAuth, ChatController.estado);
 router.get("/mensajes/:id/archivo", requireAuth, ChatController.archivo);
 router.get("/usuarios/:id/foto", requireAuth, ChatController.foto);
 router.get("/no-leidos", requireAuth, ChatController.noLeidos);
+// Empresa: escribirle a los psicólogos que se postularon a sus ofertas
+router.get("/empresa/postulados", requireAuth, ChatController.postulados);
+router.post("/empresa/postulados/:usuarioId", requireAuth, ChatController.escribirPostulado);
 
 export default router;

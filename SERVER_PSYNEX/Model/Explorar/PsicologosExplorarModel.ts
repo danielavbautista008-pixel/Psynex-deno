@@ -1,5 +1,5 @@
 import { conexion } from "../conexion.ts";
-import type { AgendarCitaInput, ListarPsicologosQuery } from "../../Validators/Explorar/ExplorarValidator.ts";
+import type { AgendarCitaInput, ListarPsicologosQuery, ResenaInput } from "../../Validators/Explorar/ExplorarValidator.ts";
 import { ahoraColombia, aMinutos, desdeMinutos, diaSemana, horaCorta, sumarDias } from "../../Helpers/Fechas.ts";
 
 type Fila = Record<string, unknown>;
@@ -58,6 +58,9 @@ const SELECT_PSICOLOGO = `
   SELECT p.PerfilId, u.NombreCompleto, p.Biografia, p.Modalidad, p.TipoServicio,
          p.PrecioPorHora, p.ServicioVoluntario, p.Direccion,
          (p.Foto IS NOT NULL AND p.Foto LIKE 'data:image/%') AS TieneFoto,
+         -- cambio: "versión" de la foto (cambia cuando cambia la foto); va en la URL
+         -- para que el navegador no muestre la foto vieja guardada en su caché
+         CRC32(p.Foto) AS FotoVersion,
          ca.Modalidades, ca.DuracionMinutos,
          (SELECT e.Titulo FROM estudios e WHERE e.PerfilId = p.PerfilId
            ORDER BY e.EnCurso ASC, e.FechaGrado DESC LIMIT 1) AS Titulo,
@@ -100,6 +103,7 @@ function armarPsicologo(f: Fila, especialidades: string[]) {
     duracionMinutos: Number(f.DuracionMinutos ?? AGENDA_POR_DEFECTO.duracion),
     // La foto se pide aparte (es pesada): /api/explorar/psicologos/:id/foto
     tieneFoto: Number(f.TieneFoto ?? 0) === 1,
+    fotoVersion: f.FotoVersion === null || f.FotoVersion === undefined ? "" : String(f.FotoVersion),
   };
 }
 
@@ -281,12 +285,22 @@ export const PsicologosExplorarModel = {
       fecha: r.CreadoEn,
     }));
 
+    // Horario semanal de atención (lo que configuró en su agenda)
+    const horarios = (await conexion.query(
+      `SELECT DiaSemana, TIME_FORMAT(HoraInicio, '%H:%i') AS Desde, TIME_FORMAT(HoraFin, '%H:%i') AS Hasta
+       FROM disponibilidadpsicologo
+       WHERE PerfildId = ? AND EstaActiva = 1 AND TipoConfiguracion = 'Fija' AND DiaSemana IS NOT NULL
+       ORDER BY FIELD(DiaSemana, 'Lunes', 'Martes', 'Miercoles', 'Jueves', 'Viernes', 'Sabado', 'Domingo'), HoraInicio`,
+      [perfilId],
+    ) as Fila[]).map((h) => ({ dia: String(h.DiaSemana), desde: String(h.Desde), hasta: String(h.Hasta) }));
+
     return {
       ...armarPsicologo(fila, especialidades.get(perfilId) ?? []),
       direccion: String(fila.Direccion ?? ""),
       estudios,
       experiencia,
       resenas,
+      horarios,
     };
   },
 
@@ -334,6 +348,30 @@ export const PsicologosExplorarModel = {
     if (!paciente) return { error: "Completa tu perfil de paciente antes de agendar", status: 403 };
     const pacienteId = String(paciente.PerfiluId);
 
+    // Acompañantes (pareja o familia): deben tener cuenta de paciente activa
+    let acompanantes: { usuarioId: string; perfilId: string }[] = [];
+    if (d.acompanantes.length) {
+      const filas = await conexion.query(
+        `SELECT u.UsuarioId, LOWER(u.Email) AS Email, pp.PerfiluId
+         FROM usuarios u JOIN perfilpaciente pp ON pp.UsuarioId = u.UsuarioId
+         WHERE LOWER(u.Email) IN (${d.acompanantes.map(() => "?").join(", ")})
+           AND u.Rol = 'Paciente' AND u.EstadoActivo = 1`,
+        d.acompanantes,
+      ) as Fila[];
+      const encontrados = new Map(filas.map((f) => [String(f.Email), f]));
+      const faltan = d.acompanantes.filter((c) => !encontrados.has(c));
+      if (faltan.length) {
+        return {
+          error: `${faltan.length === 1 ? "Este correo no tiene" : "Estos correos no tienen"} cuenta de paciente en Psynex: ${faltan.join(", ")}. Pídeles que se registren primero.`,
+          status: 400,
+        };
+      }
+      acompanantes = filas.map((f) => ({ usuarioId: String(f.UsuarioId), perfilId: String(f.PerfiluId) }));
+      if (acompanantes.some((a) => a.perfilId === pacienteId)) {
+        return { error: "No escribas tu propio correo como acompañante.", status: 400 };
+      }
+    }
+
     // ¿Ese horario sigue libre? (se recalcula con las reglas del psicólogo)
     const [dia] = await calcularDisponibilidad(perfilId, d.fecha, 1);
     if (!dia || dia.fecha !== d.fecha || !dia.horas.includes(d.hora)) {
@@ -361,22 +399,108 @@ export const PsicologosExplorarModel = {
       await conn.execute(
         `INSERT INTO citas
            (CitaId, PacienteId, PsicologoId, FechaHora, DuracionMinutos, Modalidad,
-            TipoCita, Estado, RazonConsulta, LinkVideollamada, CreadoEn)
-         VALUES (?, ?, ?, ?, ?, ?, 'Individual', 'Pendiente', ?, NULL, NOW())`,
-        [citaId, pacienteId, perfilId, inicio, duracion, d.modalidad, d.motivo ?? ""],
+            TipoCita, Formato, Estado, RazonConsulta, LinkVideollamada, CreadoEn)
+         VALUES (?, ?, ?, ?, ?, ?, 'Individual', ?, 'Pendiente', ?, NULL, NOW())`,
+        [citaId, pacienteId, perfilId, inicio, duracion, d.modalidad, d.formato, d.motivo ?? ""],
       );
+      for (const a of acompanantes) {
+        await conn.execute(
+          `INSERT INTO participantescita (ParticipanteId, CitaId, PacienteId, AgregadoEn) VALUES (?, ?, ?, NOW())`,
+          [crypto.randomUUID(), citaId, a.perfilId],
+        );
+      }
+      const tipo = d.formato === "Individual" ? "" : ` de ${d.formato === "Pareja" ? "pareja" : "familia"}`;
       await conn.execute(
         `INSERT INTO notificaciones (NotificacionId, UsuarioId, Tipo, Titulo, Mensaje, EstaLeida, FechaEnvio)
          VALUES (?, ?, 'Sistema', 'Nueva solicitud de cita', ?, 0, NOW())`,
         [
           crypto.randomUUID(),
           psicologo.UsuarioId,
-          `Tienes una nueva solicitud de cita ${d.modalidad.toLowerCase()} para el ${d.fecha} a las ${d.hora}.`,
+          `Tienes una nueva solicitud de cita${tipo} ${d.modalidad.toLowerCase()} para el ${d.fecha} a las ${d.hora}.`,
         ],
       );
+      // Aviso a cada acompañante
+      for (const a of acompanantes) {
+        await conn.execute(
+          `INSERT INTO notificaciones (NotificacionId, UsuarioId, Tipo, Titulo, Mensaje, EstaLeida, FechaEnvio)
+           VALUES (?, ?, 'Sistema', 'Te agregaron a una cita', ?, 0, NOW())`,
+          [
+            crypto.randomUUID(),
+            a.usuarioId,
+            `Te agregaron a una cita${tipo} ${d.modalidad.toLowerCase()} el ${d.fecha} a las ${d.hora}. Te avisaremos cuando el psicólogo la confirme.`,
+          ],
+        );
+      }
       return { citaId };
     });
     return r;
+  },
+  // ------------------------------------------------------------------
+  // Reseñas: un paciente califica una sesión que de verdad tuvo con el
+  // psicólogo (la tabla calificacionescita está ligada a una cita).
+  //   "puede"    -> tiene una sesión ya realizada sin calificar
+  //   "ya"       -> ya calificó todas sus sesiones con este psicólogo
+  //   "sin-cita" -> todavía no ha tenido una sesión con él
+  // ------------------------------------------------------------------
+  async estadoResena(usuarioId: string, perfilId: string) {
+    const [pac] = await conexion.query(
+      `SELECT PerfiluId FROM perfilpaciente WHERE UsuarioId = ? LIMIT 1`,
+      [usuarioId],
+    ) as Fila[];
+    if (!pac) return { estado: "sin-cita" as const };
+    const pacienteId = String(pac.PerfiluId);
+
+    // Citas donde estuvo (como paciente principal o como acompañante)
+    // y que todavía no ha calificado él mismo
+    const [cita] = await conexion.query(
+      `SELECT c.CitaId FROM citas c
+       LEFT JOIN calificacionescita cc ON cc.CitaId = c.CitaId AND cc.PacienteId = ?
+       WHERE c.PsicologoId = ? AND cc.CalificacionId IS NULL
+         AND (c.PacienteId = ? OR EXISTS (
+               SELECT 1 FROM participantescita pc WHERE pc.CitaId = c.CitaId AND pc.PacienteId = ?))
+         AND (c.Estado = 'Completada' OR (c.Estado = 'Confirmada' AND c.FechaHora < NOW()))
+       ORDER BY c.FechaHora DESC LIMIT 1`,
+      [pacienteId, perfilId, pacienteId, pacienteId],
+    ) as Fila[];
+    if (cita) return { estado: "puede" as const, citaId: String(cita.CitaId), pacienteId };
+
+    const [ya] = await conexion.query(
+      `SELECT COUNT(*) AS n FROM calificacionescita cc JOIN citas c ON c.CitaId = cc.CitaId
+       WHERE c.PsicologoId = ? AND cc.PacienteId = ?`,
+      [perfilId, pacienteId],
+    ) as Fila[];
+    return { estado: Number(ya?.n ?? 0) > 0 ? "ya" as const : "sin-cita" as const };
+  },
+
+  async crearResena(usuarioId: string, perfilId: string, d: ResenaInput) {
+    const e = await this.estadoResena(usuarioId, perfilId);
+    if (e.estado !== "puede") {
+      return {
+        error: e.estado === "ya"
+          ? "Ya calificaste tus sesiones con este psicólogo."
+          : "Podrás calificar después de tener una sesión con este psicólogo.",
+        status: 409,
+      };
+    }
+    await conexion.execute(
+      `INSERT INTO calificacionescita (CalificacionId, CitaId, PacienteId, Puntaje, Comentario, CreadoEn)
+       VALUES (?, ?, ?, ?, ?, NOW())`,
+      [crypto.randomUUID(), e.citaId, e.pacienteId, d.puntaje, d.comentario || null],
+    );
+
+    // Aviso al psicólogo en su campana
+    const [psi] = await conexion.query(
+      `SELECT UsuarioId FROM perfilpsicologo WHERE PerfilId = ? LIMIT 1`,
+      [perfilId],
+    ) as Fila[];
+    if (psi?.UsuarioId) {
+      await conexion.execute(
+        `INSERT INTO notificaciones (NotificacionId, UsuarioId, Tipo, Titulo, Mensaje, EstaLeida, FechaEnvio)
+         VALUES (?, ?, 'Sistema', 'Nueva reseña', ?, 0, NOW())`,
+        [crypto.randomUUID(), psi.UsuarioId, `Un paciente calificó su sesión con ${d.puntaje} de 5 estrellas.`],
+      ).catch((err) => console.error("Notificación de reseña:", err));
+    }
+    return { ok: true as const };
   },
 };
 

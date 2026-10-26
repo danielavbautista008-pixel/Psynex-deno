@@ -160,7 +160,20 @@ export const FinanzasPsicologoModel = {
       `DELETE FROM cuentaspsicologo WHERE CuentaId = ? AND PerfilcId = ?`,
       [cuentaId, perfilId],
     );
-    return (r.affectedRows ?? 0) > 0;
+    if ((r.affectedRows ?? 0) === 0) return false;
+
+    // Si borró la cuenta oficial, la más reciente que quede pasa a ser la oficial
+    const [hayPrincipal] = await conexion.query(
+      `SELECT 1 AS ok FROM cuentaspsicologo WHERE PerfilcId = ? AND EsPrincipal = 1 LIMIT 1`,
+      [perfilId],
+    );
+    if (!hayPrincipal) {
+      await conexion.execute(
+        `UPDATE cuentaspsicologo SET EsPrincipal = 1 WHERE PerfilcId = ? ORDER BY CreadoEn DESC LIMIT 1`,
+        [perfilId],
+      );
+    }
+    return true;
   },
 
   // ------------------------------ Reclamos ------------------------------

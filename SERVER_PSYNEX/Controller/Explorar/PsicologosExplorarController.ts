@@ -1,8 +1,10 @@
 import type { Context, RouterContext } from "../../Dependencies/dependencias.ts";
+import { responderImagen } from "../../Helpers/Imagen.ts";
 import {
   agendarCitaSchema,
   disponibilidadSchema,
   listarPsicologosSchema,
+  resenaSchema,
 } from "../../Validators/Explorar/ExplorarValidator.ts";
 import { PsicologosExplorarModel } from "../../Model/Explorar/PsicologosExplorarModel.ts";
 import { erroresZod, leerBody, responderError } from "../../Helpers/Peticion.ts";
@@ -47,10 +49,8 @@ export const PsicologosExplorarController = {
     try {
       const img = await PsicologosExplorarModel.foto(ctx.params.id!);
       if (!img) return responderError(ctx, 404, "Sin foto");
-      ctx.response.headers.set("Content-Type", img.mime);
-      ctx.response.headers.set("Cache-Control", "public, max-age=3600");
-      ctx.response.headers.set("X-Content-Type-Options", "nosniff");
-      ctx.response.body = img.bytes;
+      // cambio: sin caché de 1 hora, así la foto nueva se ve apenas se cambia
+      await responderImagen(ctx, img, true);
     } catch (e) {
       console.error(e);
       responderError(ctx, 500, "Error al obtener la foto");
@@ -89,6 +89,35 @@ export const PsicologosExplorarController = {
     } catch (e) {
       console.error(e);
       responderError(ctx, 500, "Error al agendar la cita");
+    }
+  },
+
+  // GET /api/explorar/psicologos/:id/mi-resena  (paciente con sesión)
+  // ¿Puede calificar a este psicólogo?
+  async estadoResena(ctx: RouterContext<string>) {
+    if (!esUuid(ctx.params.id)) return responderError(ctx, 404, "Psicólogo no encontrado");
+    try {
+      const e = await PsicologosExplorarModel.estadoResena(String(ctx.state.usuario.id), ctx.params.id!);
+      ctx.response.body = { ok: true, estado: e.estado };
+    } catch (e) {
+      console.error(e);
+      responderError(ctx, 500, "Error al revisar la reseña");
+    }
+  },
+
+  // POST /api/explorar/psicologos/:id/resenas  { puntaje, comentario }
+  async crearResena(ctx: RouterContext<string>) {
+    if (!esUuid(ctx.params.id)) return responderError(ctx, 404, "Psicólogo no encontrado");
+    const v = resenaSchema.safeParse(await leerBody(ctx));
+    if (!v.success) return responderError(ctx, 400, erroresZod(v.error));
+    try {
+      const r = await PsicologosExplorarModel.crearResena(String(ctx.state.usuario.id), ctx.params.id!, v.data);
+      if ("error" in r) return responderError(ctx, r.status ?? 400, r.error ?? "No se pudo guardar la reseña");
+      ctx.response.status = 201;
+      ctx.response.body = { ok: true, mensaje: "¡Gracias! Tu reseña quedó publicada." };
+    } catch (e) {
+      console.error(e);
+      responderError(ctx, 500, "Error al guardar la reseña");
     }
   },
 };

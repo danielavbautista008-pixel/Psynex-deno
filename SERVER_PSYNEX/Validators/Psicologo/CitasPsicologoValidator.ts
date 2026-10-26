@@ -18,5 +18,8 @@ export const cambiarEstadoCitaSchema = z.object({
   estado: z.enum(["Confirmada", "Cancelada", "Completada"]),
   motivo: z.string().trim().max(500).optional(),
   linkVideollamada: z.string().trim().max(500).optional(),
+  // cambio: lugar de la cita presencial (si viene vacío se usa la dirección del perfil)
+  direccion: z.string().trim().max(300).optional(),
+  indicaciones: z.string().trim().max(500).optional(),
 });
 export type CambiarEstadoCitaInput = z.infer<typeof cambiarEstadoCitaSchema>;

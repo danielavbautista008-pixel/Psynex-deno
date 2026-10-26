@@ -243,8 +243,16 @@ export const EmailService = {
     hora: string;
     modalidad: string;
     enlaceVideollamada?: string;
+    direccion?: string; // cambio: lugar de la cita presencial
+    indicaciones?: string;
   }) {
     const { transporter, user } = obtenerTransporter();
+    // cambio: enlace de Google Maps (sin llave) para llegar al consultorio
+    const mapa = datos.direccion
+      ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+        /colombia/i.test(datos.direccion) ? datos.direccion : `${datos.direccion}, Colombia`,
+      )}`
+      : "";
 
     const html = plantillaHtmlBase(
       "Confirmación de cita",
@@ -260,9 +268,18 @@ export const EmailService = {
         <p style="margin:6px 0;"><strong>Fecha:</strong> ${datos.fecha}</p>
         <p style="margin:6px 0;"><strong>Hora:</strong> ${datos.hora}</p>
         <p style="margin:6px 0;"><strong>Modalidad:</strong> ${datos.modalidad}</p>
+        ${datos.direccion ? `<p style="margin:6px 0;"><strong>Lugar:</strong> ${escaparHtml(datos.direccion)}</p>` : ""}
+        ${datos.indicaciones ? `<p style="margin:6px 0;"><strong>Indicaciones:</strong> ${escaparHtml(datos.indicaciones)}</p>` : ""}
       </div>
       ${
-        datos.enlaceVideollamada
+        mapa
+          ? `<div style="text-align:center;margin:24px 0;">
+               <a href="${mapa}" style="${btn}">Cómo llegar (Google Maps)</a>
+             </div>`
+          : ""
+      }
+      ${
+        !mapa && datos.enlaceVideollamada
           ? `<div style="text-align:center;margin:24px 0;">
                <a href="${datos.enlaceVideollamada}" style="${btn}">Unirse a la consulta</a>
              </div>`
@@ -332,6 +349,8 @@ export const EmailService = {
     fecha: string;
     hora: string;
     motivo?: string;
+    ruta?: string; // cambio: a dónde lleva el botón (el psicólogo va a sus citas)
+    boton?: string;
   }) {
     const { transporter, user } = obtenerTransporter();
     const frontend = obtenerFrontendUrl();
@@ -352,10 +371,10 @@ export const EmailService = {
           : ""
       }
       <p style="margin:0 0 8px 0;font-size:14px;color:#5c574f;">
-        Puedes reagendar cuando lo necesites.
+        ${datos.ruta ? "Ese horario quedó libre en tu agenda." : "Puedes reagendar cuando lo necesites."}
       </p>
       <div style="text-align:center;margin:28px 0 8px 0;">
-        <a href="${frontend}/citas" style="${btn}">Reagendar cita</a>
+        <a href="${frontend}${datos.ruta ?? "/Paciente/Especialistas"}" style="${btn}">${datos.boton ?? "Reagendar cita"}</a>
       </div>
       `,
     );
@@ -523,6 +542,52 @@ export const EmailService = {
       from: `"Psynex Seguridad" <${user}>`,
       to: datos.to,
       subject: "Tu contraseña fue cambiada - Psynex",
+      html,
+    });
+  },
+
+  // ---------- cambio: AVISOS AL ADMINISTRADOR (tiene algo por hacer) ----------
+  // Un mismo diseño para los distintos avisos: verificar psicólogo, verificar
+  // empresa, revisar comprobante de empresa, revisar pago de paciente...
+  async enviarAvisoAdmin(datos: {
+    to: string;
+    nombre: string;
+    titulo: string;
+    mensaje: string;
+    ruta: string;
+    boton?: string;
+    detalles?: [string, string][];
+  }) {
+    const { transporter, user } = obtenerTransporter();
+
+    const filas = (datos.detalles ?? [])
+      .filter(([, v]) => v)
+      .map(([k, v]) => `<p style="margin:6px 0;"><strong>${escaparHtml(k)}:</strong> ${escaparHtml(v)}</p>`)
+      .join("");
+
+    const html = plantillaHtmlBase(
+      datos.titulo,
+      `
+      <h1 style="margin:0 0 16px 0;font-size:20px;font-weight:600;color:#2c2a26;">
+        ${escaparHtml(datos.titulo)}
+      </h1>
+      <p style="margin:0 0 12px 0;">
+        Hola <strong>${escaparHtml(primerNombre(datos.nombre))}</strong>, ${escaparHtml(datos.mensaje)}
+      </p>
+      ${filas ? `<div style="${caja}">${filas}</div>` : ""}
+      <div style="text-align:center;margin:28px 0 8px;">
+        <a href="${obtenerFrontendUrl()}${datos.ruta}" style="${btn}">${escaparHtml(datos.boton ?? "Revisar ahora")}</a>
+      </div>
+      <p style="margin:16px 0 0;font-size:12px;color:#5c574f;text-align:center;">
+        Recibes este correo porque eres administrador de Psynex.
+      </p>
+      `,
+    );
+
+    return await transporter.sendMail({
+      from: `"Psynex Administración" <${user}>`,
+      to: datos.to,
+      subject: `${datos.titulo} - Psynex`,
       html,
     });
   },

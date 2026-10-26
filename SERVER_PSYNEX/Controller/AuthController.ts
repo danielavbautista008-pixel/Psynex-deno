@@ -24,6 +24,7 @@ import {
 } from "../Helpers/Archivos.ts";
 import { RegistroModel, type DocumentoGuardado } from "../Model/RegistroModel.ts";
 import { conexion } from "../Model/conexion.ts";
+import { avisarAdmins } from "../Helpers/AvisosAdmin.ts"; // cambio: avisos al administrador
 
 // Guarda el token en una cookie segura
 const ponerCookie = async (ctx: RouterContext<string>, userId: string) => {
@@ -222,6 +223,21 @@ export const registrarPsicologo = async (ctx: RouterContext<string>) => {
         rol: "Psicologo",
     }).catch((err) => console.error("Error al enviar email de bienvenida:", err));
 
+    // cambio: avisar al administrador que hay un psicólogo por verificar
+    avisarAdmins(
+        "Nuevo psicólogo por verificar",
+        `${datos.nombreCompleto} se registró como psicólogo y subió sus documentos. Revísalos para verificar su cuenta.`,
+        "/Administrador/verificarpsicologos",
+        {
+            boton: "Verificar psicólogo",
+            detalles: [
+                ["Nombre", datos.nombreCompleto],
+                ["Correo", datos.email],
+                ["Documento", String(datos.numeroDocumento ?? "")],
+            ],
+        },
+    );
+
     await ponerCookie(ctx, usuarioId);
     ctx.response.status = 201;
     ctx.response.body = {
@@ -332,6 +348,23 @@ export const registrarEmpresa = async (ctx: RouterContext<string>) => {
         nombreCompleto: datos.nombreEmpresa,
         rol: "Empresa",
     }).catch((err) => console.error("Error al enviar email de bienvenida:", err));
+
+    // cambio: avisar al administrador que hay una empresa por verificar
+    avisarAdmins(
+        "Nueva empresa por verificar",
+        `${datos.nombreEmpresa} se registró como empresa y subió sus documentos. Revísalos para verificar su cuenta.`,
+        "/Administrador/verificarempresas",
+        {
+            boton: "Verificar empresa",
+            detalles: [
+                ["Empresa", datos.nombreEmpresa],
+                ["NIT", String(datos.nit ?? "")],
+                ["Sector", String(datos.sector ?? "")],
+                ["Correo", datos.email],
+                ["Teléfono", String(datos.telefono ?? "")],
+            ],
+        },
+    );
 
     await ponerCookie(ctx, usuarioId);
     ctx.response.status = 201;

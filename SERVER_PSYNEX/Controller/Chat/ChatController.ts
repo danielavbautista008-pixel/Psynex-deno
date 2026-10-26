@@ -1,4 +1,5 @@
 import type { Context, RouterContext } from "../../Dependencies/dependencias.ts";
+import { responderImagen } from "../../Helpers/Imagen.ts";
 import {
   estadoConversacionSchema,
   eventoSocketSchema,
@@ -7,17 +8,21 @@ import {
 } from "../../Validators/Chat/ChatValidator.ts";
 import { ChatModel, type MensajeChat } from "../../Model/Chat/ChatModel.ts";
 import { ChatHub } from "../../Helpers/ChatHub.ts";
+import { SalaHub } from "../../Helpers/SalaHub.ts";
 import { erroresZod, leerBody, responderError } from "../../Helpers/Peticion.ts";
 import { guardarArchivo, leerArchivoSubido, nombreSeguro } from "../../Helpers/Archivos.ts";
 import { decodificarDataUrl } from "../../Model/Explorar/PsicologosExplorarModel.ts";
+import { accesoSala } from "../Sala/SalaController.ts";
 
 const yo = (ctx: Context) => ({
   id: String(ctx.state.usuario?.id ?? ""),
   rol: String(ctx.state.usuario?.rol ?? ""),
 });
 
-// Solo pacientes y psicólogos usan el chat
-const puedeChatear = (rol: string) => rol === "Paciente" || rol === "Psicologo";
+// Usan el chat: pacientes y psicólogos (por sus citas) y empresas (con sus postulados)
+const puedeChatear = (rol: string) => rol === "Paciente" || rol === "Psicologo" || rol === "Empresa";
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ---------------------------------------------------------------------
 // Archivos permitidos: imágenes JPG/PNG, PDF y Word (.doc/.docx), máx. 5 MB.
@@ -84,7 +89,7 @@ export const ChatController = {
   // GET /api/chat/conversaciones
   async conversaciones(ctx: Context) {
     const u = yo(ctx);
-    if (!puedeChatear(u.rol)) return responderError(ctx, 403, "El chat es solo para pacientes y psicólogos");
+    if (!puedeChatear(u.rol)) return responderError(ctx, 403, "No tienes acceso al chat");
     try {
       await ChatModel.asegurarConversaciones(u.id, u.rol);
       const lista = await ChatModel.listarConversaciones(u.id);
@@ -200,9 +205,8 @@ export const ChatController = {
     try {
       const img = decodificarDataUrl(await ChatModel.fotoDe(ctx.params.id ?? "", u.id));
       if (!img) return responderError(ctx, 404, "Sin foto");
-      ctx.response.headers.set("Content-Type", img.mime);
-      ctx.response.headers.set("Cache-Control", "private, max-age=3600");
-      ctx.response.body = img.bytes;
+      // cambio: sin caché de 1 hora, así la foto nueva se ve apenas se cambia
+      await responderImagen(ctx, img);
     } catch (e) {
       console.error(e);
       responderError(ctx, 500, "Error al obtener la foto");
@@ -225,7 +229,8 @@ export const ChatController = {
     }
   },
 
-  // PATCH /api/chat/conversaciones/:id/estado  { cerrada }  (solo el psicólogo)
+  // PATCH /api/chat/conversaciones/:id/estado  { cerrada }
+  // (solo quien inició: el psicólogo con sus pacientes, la empresa con sus postulados)
   async estado(ctx: RouterContext<string>) {
     const u = yo(ctx);
     const v = estadoConversacionSchema.safeParse(await leerBody(ctx));
@@ -233,7 +238,7 @@ export const ChatController = {
     try {
       const conv = await ChatModel.participante(ctx.params.id ?? "", u.id);
       if (!conv) return responderError(ctx, 404, "Conversación no encontrada");
-      if (conv.psicologoId !== u.id) return responderError(ctx, 403, "Solo el psicólogo puede cerrar la conversación");
+      if (conv.psicologoId !== u.id) return responderError(ctx, 403, "Solo quien inició la conversación puede cerrarla");
       await ChatModel.cambiarEstado(conv.id, v.data.cerrada);
       const evento = { tipo: "conversacion", conversacionId: conv.id, cerrada: v.data.cerrada };
       ChatHub.enviarA(conv.psicologoId, evento);
@@ -242,6 +247,38 @@ export const ChatController = {
     } catch (e) {
       console.error(e);
       responderError(ctx, 500, "Error al cambiar el estado");
+    }
+  },
+
+  // GET /api/chat/empresa/postulados  (solo empresa)
+  async postulados(ctx: Context) {
+    const u = yo(ctx);
+    if (u.rol !== "Empresa") return responderError(ctx, 403, "Solo para empresas");
+    try {
+      const postulados = await ChatModel.postuladosDeEmpresa(u.id);
+      ctx.response.body = {
+        ok: true,
+        postulados: postulados.map((p) => ({ ...p, enLinea: ChatHub.enLinea(p.usuarioId) })),
+      };
+    } catch (e) {
+      console.error(e);
+      responderError(ctx, 500, "Error al listar los postulados");
+    }
+  },
+
+  // POST /api/chat/empresa/postulados/:usuarioId  -> abre (o crea) el chat con ese postulado
+  async escribirPostulado(ctx: RouterContext<string>) {
+    const u = yo(ctx);
+    if (u.rol !== "Empresa") return responderError(ctx, 403, "Solo para empresas");
+    const psicologo = ctx.params.usuarioId ?? "";
+    if (!UUID.test(psicologo)) return responderError(ctx, 404, "Postulado no encontrado");
+    try {
+      const conversacionId = await ChatModel.conversacionConPostulado(u.id, psicologo);
+      if (!conversacionId) return responderError(ctx, 404, "Esa persona no se postuló a tus ofertas");
+      ctx.response.body = { ok: true, conversacionId };
+    } catch (e) {
+      console.error(e);
+      responderError(ctx, 500, "Error al abrir la conversación");
     }
   },
 
@@ -259,7 +296,7 @@ export const ChatController = {
   // GET /api/chat/ws  -> abre el WebSocket (chat en tiempo real)
   socket(ctx: Context) {
     const u = yo(ctx);
-    if (!puedeChatear(u.rol)) return responderError(ctx, 403, "El chat es solo para pacientes y psicólogos");
+    if (!puedeChatear(u.rol)) return responderError(ctx, 403, "No tienes acceso al chat");
     if (!ctx.isUpgradable) return responderError(ctx, 400, "Esta ruta solo acepta WebSocket");
 
     const socket = ctx.upgrade();
@@ -282,14 +319,26 @@ export const ChatController = {
 
     socket.onclose = () => {
       if (ChatHub.quitar(u.id, socket)) avisarEstado(false);
+      // Si estaba en una videollamada, se les avisa a los demás
+      for (const [citaId, miembros] of salas) {
+        if (SalaHub.salir(citaId, u.id, socket)) {
+          for (const id of miembros) ChatHub.enviarA(id, { tipo: "sala", citaId, accion: "salio", datos: null, de: u.id });
+        }
+      }
     };
 
     socket.onerror = () => {
       /* el cierre se maneja en onclose */
     };
 
+    // Salas de videollamada que este navegador ya tiene permitidas
+    // (citaId -> las demás personas de esa cita)
+    const salas = new Map<string, Set<string>>();
+
     socket.onmessage = async (e) => {
       let datos: unknown;
+      // Los datos de conexión de video son pequeños; nada más grande de 64 KB
+      if (String(e.data).length > 64_000) return;
       try {
         datos = JSON.parse(String(e.data));
       } catch {
@@ -308,6 +357,62 @@ export const ChatController = {
         if (ev.tipo === "mensaje") {
           const r = await enviarTexto(u.id, ev.conversacionId, ev.texto);
           if ("error" in r) socket.send(JSON.stringify({ tipo: "error", error: r.error }));
+          return;
+        }
+
+        if (ev.tipo === "sala") {
+          // Solo las personas de la cita, y solo cuando la sala está abierta
+          let miembros = salas.get(ev.citaId);
+          if (!miembros) {
+            const a = await accesoSala(ev.citaId, u.id);
+            if (!a.ok || !a.puedeEntrar) {
+              socket.send(JSON.stringify({ tipo: "sala", citaId: ev.citaId, accion: "error", datos: "No puedes entrar a esta sala." }));
+              return;
+            }
+            miembros = new Set(a.otros.map((m) => m.usuarioId));
+            salas.set(ev.citaId, miembros);
+          }
+          const responder = (accion: string, datos: unknown) =>
+            socket.send(JSON.stringify({ tipo: "sala", citaId: ev.citaId, accion, datos }));
+          const aTodos = (accion: string, datos: unknown = null) => {
+            for (const id of miembros!) ChatHub.enviarA(id, { tipo: "sala", citaId: ev.citaId, accion, datos, de: u.id });
+          };
+
+          switch (ev.accion) {
+            // Antes de entrar: ¿quiénes ya están dentro?
+            case "hola":
+              responder("presentes", { ids: SalaHub.presentes(ev.citaId, u.id) });
+              return;
+
+            // Entra: se le dice quiénes están (se conecta con cada uno)
+            // y a los demás que llegó alguien
+            case "entrar":
+              responder("presentes", { ids: SalaHub.entrar(ev.citaId, u.id, socket) });
+              aTodos("entro");
+              return;
+
+            case "salir":
+              if (SalaHub.salir(ev.citaId, u.id, socket)) aTodos("salio");
+              return;
+
+            // Datos de conexión: van a UNA persona de la misma cita
+            case "oferta":
+            case "respuesta":
+            case "ice":
+              if (ev.para && miembros.has(ev.para)) {
+                ChatHub.enviarA(ev.para, { tipo: "sala", citaId: ev.citaId, accion: ev.accion, datos: ev.datos ?? null, de: u.id });
+              }
+              return;
+
+            // Micrófono / cámara / pantalla: a una persona o a todos
+            case "medios":
+              if (ev.para) {
+                if (miembros.has(ev.para)) {
+                  ChatHub.enviarA(ev.para, { tipo: "sala", citaId: ev.citaId, accion: "medios", datos: ev.datos ?? null, de: u.id });
+                }
+              } else aTodos("medios", ev.datos ?? null);
+              return;
+          }
           return;
         }
 

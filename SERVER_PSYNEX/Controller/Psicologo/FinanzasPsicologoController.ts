@@ -7,6 +7,8 @@ import {
 } from "../../Validators/Psicologo/FinanzasPsicologoValidator.ts";
 import { FinanzasPsicologoModel } from "../../Model/Psicologo/FinanzasPsicologoModel.ts";
 import { leerBody, erroresZod, responderError } from "../../Helpers/Peticion.ts";
+import { avisarAdmins } from "../../Helpers/AvisosAdmin.ts"; // cambio: avisos al administrador
+import { conexion } from "../../Model/conexion.ts";
 
 const perfilId = (ctx: Context) => String(ctx.state.perfilPsicologo.PerfilId);
 
@@ -105,6 +107,27 @@ export const FinanzasPsicologoController = {
     try {
       const reclamoId = await FinanzasPsicologoModel.crearReclamo(perfilId(ctx), v.data);
       if (!reclamoId) return responderError(ctx, 404, "Ese pago no corresponde a tus citas");
+
+      // cambio: avisar al administrador (campanita + correo) que hay un reclamo por responder
+      const [ps] = await conexion.query(
+        `SELECT u.NombreCompleto, u.Email FROM perfilpsicologo p JOIN usuarios u ON u.UsuarioId = p.UsuarioId
+         WHERE p.PerfilId = ? LIMIT 1`,
+        [perfilId(ctx)],
+      ) as { NombreCompleto: string; Email: string }[];
+      avisarAdmins(
+        "Nuevo reclamo de pago",
+        `${ps?.NombreCompleto ?? "Un psicólogo"} envió un reclamo sobre sus pagos: "${v.data.motivo}".`,
+        "/Administrador/reclamos",
+        {
+          boton: "Responder reclamo",
+          detalles: [
+            ["Psicólogo", `${ps?.NombreCompleto ?? ""} (${ps?.Email ?? ""})`],
+            ["Motivo", v.data.motivo],
+            ["Descripción", v.data.descripcion],
+          ],
+        },
+      );
+
       ctx.response.status = 201;
       ctx.response.body = { ok: true, reclamoId };
     } catch (e) {
