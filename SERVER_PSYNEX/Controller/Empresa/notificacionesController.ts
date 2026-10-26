@@ -1,8 +1,9 @@
-import { Context } from "../Dependencies/dependencias.ts";
-import { Notificacion, NotificacionData } from "../Model/notificacionModel.ts";
+import { Context } from "../../Dependencies/dependencias.ts";
+import { Notificacion, NotificacionData } from "../../Model/Empresa/notificacionesModel.ts";
 
 // GET /notificaciones/usuario/:usuarioId
 export const getPorUsuario = async (ctx: Context) => {
+     // @ts-ignore
     const { response, params } = ctx;
     try {
         const ObjNotificacion = new Notificacion();
@@ -27,6 +28,7 @@ export const getPorUsuario = async (ctx: Context) => {
 export const crearNotificacion = async (ctx: Context) => {
     const { request, response } = ctx;
     try {
+         // @ts-ignore
         const body = request.body();
         const dto: NotificacionData = await body.value;
 
@@ -50,6 +52,7 @@ export const crearNotificacion = async (ctx: Context) => {
 
 // PUT /notificaciones/:id/leer
 export const marcarLeida = async (ctx: Context) => {
+     // @ts-ignore
     const { response, params } = ctx;
     try {
         const ObjNotificacion = new Notificacion();

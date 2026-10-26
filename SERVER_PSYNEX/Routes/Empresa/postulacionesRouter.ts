@@ -1,18 +1,35 @@
-import { Router } from "../Dependencies/dependencias.ts";
+import { Router } from "https://deno.land/x/oak/mod.ts";
 import {
-    getPorUsuario,
-    getPorEmpresa,
-    postularse,
-    putPostulacion,
-    deletePostulacion,
-} from "../Controller/postulacionController.ts";
+  deletePostulacion,
+  getPostulacionById,
+  getPostulacionesPorEmpresa,
+  getPostulacionesPorUsuario,
+  postPostulacion,
+  putPostulacion,
+} from "../../Controller/Empresa/postulacionesController.ts";
 
-const PostulacionRouter = new Router();
+// Importación comentada mientras pruebas sin middleware
+// import { authMiddleware } from "../Middlewares/validarJWT.ts";
 
-PostulacionRouter.get("/postulaciones/usuario/:usuarioId", getPorUsuario);
-PostulacionRouter.get("/postulaciones/empresa/:perfileId", getPorEmpresa);
-PostulacionRouter.post("/postulaciones", postularse);
-PostulacionRouter.put("/postulaciones/:id", putPostulacion);
-PostulacionRouter.delete("/postulaciones/:id", deletePostulacion);
+const postulacionRouter = new Router();
 
-export { PostulacionRouter };
+// Rutas de consulta
+postulacionRouter.get("/api/postulaciones/:id", getPostulacionById);
+postulacionRouter.get(
+  "/api/postulaciones/usuario/:usuarioId",
+  getPostulacionesPorUsuario
+);
+postulacionRouter.get(
+  "/api/postulaciones/empresa/:perfileId",
+  getPostulacionesPorEmpresa
+);
+
+// Rutas de escritura (authMiddleware comentado temporalmente)
+postulacionRouter.post("/api/postulaciones", /* authMiddleware, */ postPostulacion);
+postulacionRouter.put("/api/postulaciones/:id", /* authMiddleware, */ putPostulacion);
+postulacionRouter.delete(
+  "/api/postulaciones/:id",
+  /* authMiddleware, */ deletePostulacion
+);
+
+export default postulacionRouter;

@@ -1,4 +1,4 @@
-import { conexion } from "../Model/conexion.ts";
+import { conexion } from "../conexion.ts";
 
 export interface NotificacionData {
     notificacionId?: string | null;
@@ -20,13 +20,13 @@ export class Notificacion {
     }
 
     // Seleccionar por ID
-    public async SeleccionarPorId(id: string): Promise<NotificacionData | null> {
-        const { rows } = await conexion.execute(
-            `SELECT * FROM "Notificaciones" WHERE "NotificacionId" = $1`,
-            [id]
-        );
-        return rows.length > 0 ? (rows[0] as NotificacionData) : null;
-    }
+    // public async SeleccionarPorId(id: string): Promise<NotificacionData | null> {
+    //     const { rows } = await conexion.execute(
+    //         `SELECT * FROM "Notificaciones" WHERE "NotificacionId" = $1`,
+    //         [id]
+    //     );
+    //     return rows.length > 0 ? (rows[0] as NotificacionData) : null;
+    // }
 
     // Seleccionar notificaciones por UsuarioId ordenadas descendente
     public async SeleccionarPorUsuario(usuarioId: string): Promise<NotificacionData[]> {

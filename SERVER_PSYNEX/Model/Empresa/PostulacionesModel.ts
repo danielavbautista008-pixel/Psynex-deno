@@ -1,143 +1,173 @@
 import { conexion } from "../conexion.ts";
 
 export interface PostulacionData {
-    postulacionId?: string | null;
-    ofertaId: string;
-    usuarioId: string;
-    cartaPresent?: string | null;
-    telefono?: string | null;
-    ciudad?: string | null;
-    especialidad?: string | null;
-    experienciaAnos?: number | null;
-    perfilProfesional?: string | null;
+    PostulacionId: string | null;
+    OfertaId: string;
+    UsuarioId: string;
+    CartaPresent: string | null;
+    Estado: "Rechazado" | "Aceptado" | "Pendiente";
+    FechadePostulacion: Date | string | null;
+    Telefono: string | null;
+    Ciudad: string | null;
+    Especialidad: string | null;
+    ExperienciaAnos: number | null;
+    PerfilProfesional: string | null;
 }
 
 export interface PostulacionResponseData extends PostulacionData {
-    nombreCompleto?: string;
-    email?: string;
-    tituloOferta?: string;
+  nombreCompleto?: string;
+  email?: string;
+  tituloOferta?: string;
 }
 
-export class Postulacion {
-    public _ObjPostulacion: PostulacionData | null;
-    public _postulacionId: string | null;
+// Obtener postulación por ID
+export const obtenerPostulacionPorId = async (id: string | number) => {
+  const resultado = await conexion.query(
+    `SELECT * FROM postulaciones WHERE PostulacionId = ?`,
+    [id]
+  );
+  return resultado[0];
+};
 
-    constructor(ObjPostulacion: PostulacionData | null = null, postulacionId: string | null = null) {
-        this._ObjPostulacion = ObjPostulacion;
-        this._postulacionId = postulacionId;
-    }
+// 1. Obtener postulaciones realizadas por un Usuario
+export const obtenerPostulacionesPorUsuario = async (
+  usuarioId: string | number
+): Promise<PostulacionResponseData[]> => {
+  const query = `
+    SELECT p.*, o.Titulo as tituloOferta
+    FROM postulaciones p
+    INNER JOIN ofertaslaborales o ON p.OfertaId = o.OfertaId
+    WHERE p.UsuarioId = ?
+  `;
+  return await conexion.query(query, [usuarioId]);
+};
 
-    // Seleccionar por ID
-   public async SeleccionarPorId(id: string): Promise<PostulacionData | null> {
-    const { rows } = await conexion.execute(
-        `SELECT * FROM "Postulaciones" WHERE "PostulacionId" = $1`,
-        [id]
-    );
+// 2. Obtener postulaciones recibidas por una Empresa (PerfilId)
+export const obtenerPostulacionesPorEmpresa = async (
+  perfileId: string | number
+): Promise<PostulacionResponseData[]> => {
+  const query = `
+    SELECT p.*, u.NombreCompleto, u.Email, o.Titulo as tituloOferta
+    FROM postulaciones p
+    INNER JOIN ofertaslaborales o ON p.OfertaId = o.OfertaId
+    LEFT JOIN usuarios u ON p.UsuarioId = u.UsuarioId
+    WHERE o.PerfileId = ?
+  `;
+  return await conexion.query(query, [perfileId]);
+};
 
-    return (rows?.length ?? 0) > 0 ? (rows?.[0] as PostulacionData) : null;
-}
+// Validar duplicados de postulación
+export const existePostulacionModel = async (
+  ofertaId: string | number,
+  usuarioId: string | number
+): Promise<boolean> => {
+  const resultado = await conexion.query(
+    `SELECT COUNT(*) as total FROM postulaciones WHERE OfertaId = ? AND UsuarioId = ?`,
+    [ofertaId, usuarioId]
+  );
+  return Number(resultado[0]?.total ?? 0) > 0;
+};
 
-    // 1. Obtener postulaciones realizadas por un Usuario
-    public async SeleccionarPorUsuario(usuarioId: string): Promise<PostulacionResponseData[]> {
-        const { rows } = await conexion.execute(
-            `SELECT p.*, o."Titulo" as "tituloOferta"
-             FROM "Postulaciones" p
-             INNER JOIN "OfertasLaborales" o ON p."OfertaId" = o."OfertaId"
-             WHERE p."UsuarioId" = $1`,
-            [usuarioId]
-        );
-        return rows as PostulacionResponseData[];
-    }
+// 3. Crear Postulación
+export const crearPostulacionModel = async (datos: PostulacionData) => {
+  const postulacionId = datos.PostulacionId || crypto.randomUUID();
+  const {
+    OfertaId,
+    UsuarioId,
+    CartaPresent,
+    Telefono,
+    Ciudad,
+    Especialidad,
+    ExperienciaAnos,
+    PerfilProfesional,
+    Estado,
+  } = datos;
 
-    // 2. Obtener postulaciones recibidas por una Empresa (PerfilId)
-    public async SeleccionarPorEmpresa(perfileId: string): Promise<PostulacionResponseData[]> {
-        const { rows } = await conexion.execute(
-            `SELECT p.*, u."NombreCompleto", u."Email", o."Titulo" as "tituloOferta"
-             FROM "Postulaciones" p
-             INNER JOIN "OfertasLaborales" o ON p."OfertaId" = o."OfertaId"
-             LEFT JOIN "Usuarios" u ON p."UsuarioId" = u."UsuarioId"
-             WHERE o."PerfileId" = $1`,
-            [perfileId]
-        );
-        return rows as PostulacionResponseData[];
-    }
+  const resultado = await conexion.execute(
+    `INSERT INTO postulaciones 
+     (PostulacionId, OfertaId, UsuarioId, CartaPresent, Telefono, Ciudad, Especialidad, ExperienciaAnos, PerfilProfesional, Estado)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      postulacionId,
+      OfertaId,
+      UsuarioId,
+      CartaPresent || null,
+      Telefono || null,
+      Ciudad || null,
+      Especialidad || null,
+      ExperienciaAnos || 0,
+      PerfilProfesional || null,
+      Estado || "Pendiente",
+    ]
+  );
 
-    // Validar duplicados
-   public async ExistePostulacion(ofertaId: string, usuarioId: string): Promise<boolean> {
-    const { rows } = await conexion.execute(
-        `SELECT COUNT(*) as total FROM "Postulaciones" WHERE "OfertaId" = $1 AND "UsuarioId" = $2`,
-        [ofertaId, usuarioId]
-    );
+  return postulacionId;
+};
 
-    return Number(rows?.[0]?.total ?? 0) > 0;
-}
+// 4. Actualizar Postulación
+export const actualizarPostulacionModel = async (
+  id: string | number,
+  datos: Partial<PostulacionData>
+) => {
+  const {
+    CartaPresent,
+    Telefono,
+    Ciudad,
+    Especialidad,
+    ExperienciaAnos,
+    PerfilProfesional,
+    Estado,
+  } = datos;
 
-    // 3. Crear Postulación
-    public async InsertarPostulacion(datos: PostulacionData): Promise<PostulacionResponseData> {
-        const id = datos.postulacionId || crypto.randomUUID();
+  await conexion.execute(
+    `UPDATE postulaciones
+     SET CartaPresent = ?, Telefono = ?, Ciudad = ?, Especialidad = ?, ExperienciaAnos = ?, PerfilProfesional = ?, Estado = ?
+     WHERE PostulacionId = ?`,
+    [
+      CartaPresent,
+      Telefono,
+      Ciudad,
+      Especialidad,
+      ExperienciaAnos,
+      PerfilProfesional,
+      Estado,
+      id,
+    ]
+  );
+  return true;
+};
 
-        await conexion.execute(
-            `INSERT INTO "Postulaciones" 
-             ("PostulacionId", "OfertaId", "UsuarioId", "CartaPresent", "Telefono", "Ciudad", "Especialidad", "ExperienciaAnos", "PerfilProfesional")
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-            [
-                id,
-                datos.ofertaId,
-                datos.usuarioId,
-                datos.cartaPresent ?? null,
-                datos.telefono ?? null,
-                datos.ciudad ?? null,
-                datos.especialidad ?? null,
-                datos.experienciaAnos ?? 0,
-                datos.perfilProfesional ?? null
-            ]
-        );
+// 5. Eliminar Postulación
+export const eliminarPostulacionModel = async (id: string | number) => {
+  await conexion.execute(
+    `DELETE FROM postulaciones WHERE PostulacionId = ?`,
+    [id]
+  );
+  return true;
+};
 
-        const { rows: usuarios } = await conexion.execute(
-            `SELECT "NombreCompleto", "Email" FROM "Usuarios" WHERE "UsuarioId" = $1`,
-            [datos.usuarioId]
-        );
-
-        const usuario = (usuarios?.length ?? 0) > 0 ? usuarios?.[0] : null;
-
-        return {
-            ...datos,
-            postulacionId: id,
-            nombreCompleto: usuario?.NombreCompleto ?? "Usuario Registrado",
-            email: usuario?.Email ?? "Sin Correo",
-        };
-    }
-
-    // 4. Editar Postulación
-    public async ActualizarPostulacion(id: string, datos: Partial<PostulacionData>): Promise<boolean> {
-        const result = await conexion.execute(
-            `UPDATE "Postulaciones"
-             SET "CartaPresent" = $1,
-                 "Telefono" = $2,
-                 "Ciudad" = $3,
-                 "Especialidad" = $4,
-                 "ExperienciaAnos" = $5,
-                 "PerfilProfesional" = $6
-             WHERE "PostulacionId" = $7`,
-            [
-                datos.cartaPresent ?? null,
-                datos.telefono ?? null,
-                datos.ciudad ?? null,
-                datos.especialidad ?? null,
-                datos.experienciaAnos ?? 0,
-                datos.perfilProfesional ?? null,
-                id
-            ]
-        );
-        return (result.affectedRows ?? 0) > 0;
-    }
-
-    // 5. Eliminar Postulación
-    public async EliminarPostulacion(id: string): Promise<boolean> {
-        const result = await conexion.execute(
-            `DELETE FROM "Postulaciones" WHERE "PostulacionId" = $1`,
-            [id]
-        );
-        return (result.affectedRows ?? 0) > 0;
-    }
-}
+// contar postulaciones por empresa y estado
+// export const contarPostulacionesPorEmpresaYEstado = async (
+//   perfileId: string | number,
+//   estado: string
+// ): Promise<number> => {
+//   const resultado = await conexion.query(
+//     `SELECT COUNT(*) as total FROM postulaciones p
+//      INNER JOIN ofertaslaborales o ON p.OfertaId = o.OfertaId
+//      WHERE o.PerfileId = ? AND p.Estado = ?`,
+//     [perfileId, estado]
+//   );
+//   return Number(resultado[0]?.total ?? 0);
+// };
+// contar postulaciones por Usuario Psicologo y estado
+// export const contarPostulacionesPorUsuarioYEstado = async (
+//   usuarioId: string | number,
+//   estado: string
+// ): Promise<number> => {
+//   const resultado = await conexion.query(
+//     `SELECT COUNT(*) as total FROM postulaciones
+//      WHERE UsuarioId = ? AND Estado = ?`,
+//     [usuarioId, estado]
+//   );
+//   return Number(resultado[0]?.total ?? 0);
+// };

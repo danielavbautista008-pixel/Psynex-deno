@@ -1,22 +1,38 @@
-import { Router } from "../Dependencies/dependencias.ts";
+import { Router } from "https://deno.land/x/oak/mod.ts";
 import {
-    getOfertas,
-    getOfertasPorEmpresa,
-    contarOfertasActivasPorEmpresa,
-    getPublicos,
-    postOferta,
-    putOferta,
-    deleteOferta,
-} from "../Controller/ofertaLaboralController.ts";
+  deleteOferta,
+  getContarOfertasEmpresa,
+  getOfertaById,
+  getOfertas,
+  getOfertasByEmpresa,
+  getOfertasPublicas,
+  patchDesactivarOferta,
+  postOferta,
+  putOferta,
+} from "../../Controller/Empresa/ofertaController.ts";
 
-const OfertaLaboralRouter = new Router();
+// Importación comentada mientras pruebas sin middleware
+// import { authMiddleware } from "../Middlewares/validarJWT.ts";
 
-OfertaLaboralRouter.get("/ofertaslaborales", getOfertas);
-OfertaLaboralRouter.get("/ofertaslaborales/publicos", getPublicos);
-OfertaLaboralRouter.get("/ofertaslaborales/empresa/:perfileId", getOfertasPorEmpresa);
-OfertaLaboralRouter.get("/ofertaslaborales/empresa/:perfileId/contar", contarOfertasActivasPorEmpresa);
-OfertaLaboralRouter.post("/ofertaslaborales", postOferta);
-OfertaLaboralRouter.put("/ofertaslaborales/:id", putOferta);
-OfertaLaboralRouter.delete("/ofertaslaborales/:id", deleteOferta);
+const ofertaLaboralRouter = new Router();
 
-export { OfertaLaboralRouter };
+// Rutas públicas / de consulta
+ofertaLaboralRouter.get("/api/ofertas", getOfertas);
+ofertaLaboralRouter.get("/api/ofertas/publicas", getOfertasPublicas);
+ofertaLaboralRouter.get("/api/ofertas/:OfertaId", getOfertaById);
+ofertaLaboralRouter.get("/api/ofertas/empresa/:PerfileId", getOfertasByEmpresa);
+ofertaLaboralRouter.get("/api/ofertas/empresa/:PerfileId/contar", getContarOfertasEmpresa);
+
+// Rutas de escritura y administración (AuthMiddleware comentado temporalmente)
+ofertaLaboralRouter.post("/api/ofertas", /* authMiddleware, */ postOferta);
+ofertaLaboralRouter.put("/api/ofertas/:OfertaId", /* authMiddleware, */ putOferta);
+ofertaLaboralRouter.patch(
+  "/api/ofertas/:OfertaId/desactivar",
+  /* authMiddleware, */ patchDesactivarOferta
+);
+ofertaLaboralRouter.delete(
+  "/api/ofertas/:OfertaId",
+  /* authMiddleware, */ deleteOferta
+);
+
+export default ofertaLaboralRouter;
