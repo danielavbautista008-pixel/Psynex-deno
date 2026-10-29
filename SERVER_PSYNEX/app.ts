@@ -9,6 +9,11 @@ import usuarioRoutes from "./Routes/Administrador/UsuarioRoutes.ts";
 import CuestionariosRouter from "./Routes/Administrador/CuestionariosRoutes.ts";
 import EstadisticasRoutes from "./Routes/Administrador/EstadisticasRoutes.ts";
 import CitasRouter from "./Routes/Administrador/CitasRoutes.ts";
+import { PerfilEmpresaRouter  } from "./Routes/Empresa/perfilRouter.ts";
+import ofertaLaboralRouter from "./Routes/Empresa/ofertaRouter.ts";
+import postulacionRouter from "./Routes/Empresa/postulacionesRouter.ts";
+import favoritoRouter from "./Routes/Empresa/favoritosRouter.ts";
+import { NotificacionRouter } from "./Routes/Empresa/notificacionesRouter.ts";
 import PsicologosRouter from "./Routes/Administrador/PsicologosRoutes.ts";
 import EmpresasRouter from "./Routes/Administrador/EmpresasRoutes.ts";
 import BlogRouter from "./Routes/Administrador/BlogRoutes.ts";
@@ -60,6 +65,8 @@ const FRONTEND_URL = Deno.env.get("FRONTEND_URL") ?? "http://localhost:4321";
 
 const app = new Application();
 
+// cambio (merge con main): se deja una sola configuración de CORS con FRONTEND_URL del .env
+// (main tenía origin: "http://localhost:4321", que es el mismo valor por defecto)
 app.use(oakCors({
     origin: FRONTEND_URL,  // el origen de tu frontend (Astro), desde el .env
     credentials: true,     // necesario para que viajen las cookies
@@ -68,15 +75,17 @@ app.use(oakCors({
 // Manejo de errores global: si algo lanza una excepción, responde 500 en JSON
 // en vez de dejar la petición colgada.
 app.use(async (ctx, next) => {
-    try {
-        await next();
-    } catch (error) {
-        console.error("Error no controlado:", error);
-        ctx.response.status = 500;
-        ctx.response.body = { ok: false, mensaje: "Error interno del servidor" };
-    }
+  try {
+    await next();
+  } catch (error) {
+    console.error("Error no controlado:", error);
+    ctx.response.status = 500;
+    ctx.response.body = { ok: false, mensaje: "Error interno del servidor" };
+  }
 });
 
+// cambio (merge con main): se unieron las dos listas de rutas; las de Empresa
+// que subió main (perfil, ofertas, postulaciones, notificaciones, favoritos) quedan abajo
 const routes = [
     // Compartidas
     authRoutes, NotificacionesRouter,
@@ -110,14 +119,21 @@ const routes = [
     PagosWompiRoutes,
     // Administrador: tareas pendientes para su campanita (cambio: nuevo)
     PendientesAdminRoutes,
+    // Empresa (rutas que subió main)
+    PerfilEmpresaRouter,
+    ofertaLaboralRouter,
+    postulacionRouter,
+    NotificacionRouter,
+    favoritoRouter,
 ];
 routes.forEach((router) => {
-    app.use(router.routes());
-    app.use(router.allowedMethods());
+  app.use(router.routes());
+  app.use(router.allowedMethods());
 });
 
 // cambio: revisa cada 15 minutos las citas de las próximas 24 horas y manda los recordatorios
 iniciarRecordatorios();
 
+// cambio (merge con main): main tenía el puerto fijo 8001; se usa PUERTO (8001 por defecto)
 console.log(`Servidor corriendo por el puerto ${PUERTO}`);
 await app.listen({ port: PUERTO });

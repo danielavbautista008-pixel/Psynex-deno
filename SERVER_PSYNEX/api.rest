@@ -455,6 +455,8 @@ POST {{baseUrl}}/api/admin/planes
 Content-Type: application/json
 
 {
+  "email": "yudycogaria@gmail.com",
+  "password": "empresa123"
   "nombre": "Plan Bienestar Mensual",
   "descripcion": "4 sesiones virtuales al mes con psicólogo asignado.",
   "beneficios": "4 sesiones\nChat de apoyo\nPrioridad en agenda",
@@ -568,6 +570,188 @@ Content-Type: application/json
 }
 
 
+### 4. Detalle de una cita
+GET {{baseUrl}}/api/admin/citas/2cc19a4d-af97-4a26-bf56-6ce76171fe68
+Authorization: Bearer {{loginAdmin.response.body.token}}
+
+### ver perfil de una empresa
+### Obtener todos los perfiles
+GET http://localhost:8001/api/perfilempresa
+Accept: application/json
+
+### Obtener por ID de Perfil
+GET http://localhost:8001/api/perfilempresa/036c7c33-4702-4b24-b803-a86991ed100b
+Accept: application/json
+
+### Obtener por ID de Usuario (Ruta opcional que también agregamos)
+GET http://localhost:8001/api/perfilempresa/usuario/42a3c948-617c-407b-9ac1-08decb511d94
+Accept: application/json
+
+### Crear nuevo perfil de EMPRESA
+POST http://localhost:8001/api/perfilempresa
+Content-Type: application/json
+
+{
+  "UsuarioId": "usr-12345",
+  "NombreEmpresa": "Tech Solutions S.A.S.",
+  "Nit": "900123456-1",
+  "Sector": "Tecnología",
+  "Telefono": "+57 300 123 4567",
+  "Direccion": "Calle 100 # 15-20",
+  "SitioWeb": "https://techsolutions.com",
+  "Descripcion": "Empresa dedicada al desarrollo de software."
+}
+
+### Actualizar perfil empresa por ID
+PUT http://localhost:8001/api/perfilempresa/036c7c33-4702-4b24-b803-a86991ed100b
+Content-Type: application/json
+
+{
+  "NombreEmpresa": "Tech Solutions Internacional",
+  "Nit": "900123456-1",
+  "Telefono": "+57 311 987 6543"
+}
+
+### Eliminar perfil empresa por ID
+DELETE http://localhost:8001/api/perfilempresa/036c7c33-4702-4b24-b803-a86991ed100b
+Accept: application/json
+
+#### Ofertas Laborales
+### Obtener todas las ofertas laborales activas
+GET http://localhost:8001/api/ofertas
+Accept: application/json
+
+### Obtener ofertas públicas destacadas (límite 3)
+GET http://localhost:8001/api/ofertas/publicas
+Accept: application/json
+
+### Obtener oferta laboral por ID
+GET http://localhost:8001/api/ofertas/417e6790-c304-4ec7-969d-abd28d10f266
+Accept: application/json
+
+### Obtener ofertas laborales por ID de empresa (Perfil)
+GET http://localhost:8001/api/ofertas/empresa/036c7c33-4702-4b24-b803-a86991ed100b
+Accept: application/json
+
+### Contar total de ofertas activas por empresa
+GET http://localhost:8001/api/ofertas/empresa/036c7c33-4702-4b24-b803-a86991ed100b/contar
+Accept: application/json
+
+### Crear una nueva oferta laboral
+POST http://localhost:8001/api/ofertas
+Content-Type: application/json
+
+{
+  "perfileId": "036c7c33-4702-4b24-b803-a86991ed100b",
+  "titulo": "Desarrollador Fullstack Deno / React",
+  "descripcion": "Buscamos un desarrollador con experiencia en Deno, TypeScript y frontend React para unirse a nuestro equipo.",
+  "requisitos": "Experiencia mínima de 2 años en Node.js o Deno, manejo de MySQL/PostgreSQL y Git.",
+  "salario": 4500000,
+  "modalidad": "Remoto"
+}
+
+### Actualizar una oferta laboral por ID
+PUT http://localhost:8001/api/ofertas/123e4567-e89b-12d3-a456-426614174000
+Content-Type: application/json
+
+{
+  "titulo": "Desarrollador Senior Fullstack Deno / React",
+  "descripcion": "Se actualiza el perfil: Buscamos un profesional Senior con sólidos conocimientos de arquitectura backend.",
+  "requisitos": "3+ años de experiencia, TypeScript, Docker, CI/CD.",
+  "salario": 6000000,
+  "modalidad": "Híbrido"
+}
+
+### Desactivar/Cerrar oferta laboral (Cambio de estado)
+PATCH http://localhost:8001/api/ofertas/123e4567-e89b-12d3-a456-426614174000/desactivar
+Accept: application/json
+
+### Eliminar oferta laboral definitivamente
+DELETE http://localhost:8001/api/ofertas/123e4567-e89b-12d3-a456-426614174000
+Accept: application/json
+
+
+
+### RUTAS DE POSTULACIONES
+### Obtener postulación por ID
+GET http://localhost:8001/api/postulaciones/1
+Accept: application/json
+
+### Obtener postulaciones de un Usuario
+GET http://localhost:8001/api/postulaciones/usuario/usr-12345
+Accept: application/json
+
+### Obtener postulaciones recibidas por una Empresa (PerfilId)
+GET http://localhost:8001/api/postulaciones/empresa/036c7c33-4702-4b24-b803-a86991ed100b
+Accept: application/json
+
+### Crear nueva postulación
+POST http://localhost:8001/api/postulaciones
+Content-Type: application/json
+
+{
+
+  "OfertaId": "abab2311-1e8a-44c0-acea-ac8337d6ccab",
+  "UsuarioId": "83885c66-45ea-4ccb-8886-08dec4cd51bb",
+  "CartaPresent": "Hola, estoy muy interesado en la vacante de Desarrollador.",
+  "Telefono": "+57 300 987 6543",
+  "Ciudad": "Bogotá",
+  "Especialidad": "Psicología Organizacional",
+  "ExperienciaAnos": 3,
+  "PerfilProfesional": "Especialista en selección de talento TI y desarrollo organizacional.",
+  "Estado": "Pendiente"
+}
+
+### Actualizar estado o datos de una postulación
+PUT http://localhost:8001/api/postulaciones/1
+Content-Type: application/json
+
+{
+  "CartaPresent": "Carta de presentación actualizada.",
+  "Telefono": "+57 310 000 1122",
+  "Ciudad": "Medellín",
+  "Especialidad": "Psicología Clínica",
+  "ExperienciaAnos": 4,
+  "PerfilProfesional": "Perfil actualizado con nuevas competencias.",
+  "Estado": "Aceptado"
+}
+
+### Eliminar postulación por ID
+DELETE http://localhost:8001/api/postulaciones/0
+Accept: application/json
+
+
+# favoritos de empresas
+### Obtener todos los favoritos
+GET http://localhost:8001/api/favoritos
+Accept: application/json
+
+### Obtener favoritos por ID de Perfil Empresa
+GET http://localhost:8001/api/favoritos/perfil/036c7c33-4702-4b24-b803-a86991ed100b
+Accept: application/json
+
+### Agregar un nuevo favorito
+POST http://localhost:8001/api/favoritos
+Content-Type: application/json
+
+{
+  "FavoritoId": "e2a85f81-2c1a-4f2d-9831-a892b1234567",
+  "PerfileId": "036c7c33-4702-4b24-b803-a86991ed100b",
+  "PerfilId": "4adb5ef8-0368-45c9-a7ab-04c74a66257e",
+  "estado": true
+}
+
+### Actualizar únicamente el estado del favorito
+PATCH http://localhost:8001/api/favoritos/1/estado
+Content-Type: application/json
+
+{
+  "estado": false
+}
+
+### Eliminar favorito por ID
+DELETE http://localhost:8001/api/favoritos/1
+Accept: application/json
 #####################################################################
 #  4. PSICÓLOGO   >>> ejecuta 1.9 (logout) y luego 1.5 (login psicólogo) <<<
 #####################################################################
