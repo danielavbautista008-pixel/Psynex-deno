@@ -1,92 +1,65 @@
 import type { Context, RouterContext } from "../../Dependencies/dependencias.ts";
 import {
-  crearMetodoPagoSchema,
   actualizarMetodoPagoSchema,
+  crearMetodoPagoSchema,
 } from "../../Validators/Administrador/MetodosPagoValidator.ts";
 import { MetodosPagoModel } from "../../Model/Administrador/MetodosPagoModel.ts";
-
-async function leerBody(ctx: Context) {
-  try {
-    return await ctx.request.body.json();
-  } catch {
-    return null;
-  }
-}
+import { erroresZod, leerBody, responderError } from "../../Helpers/Peticion.ts";
 
 export const MetodosPagoController = {
+  // GET /api/admin/metodos-pago
   async listar(ctx: Context) {
     try {
       const metodos = await MetodosPagoModel.listar();
       ctx.response.body = { ok: true, metodos };
     } catch (e) {
       console.error(e);
-      ctx.response.status = 500;
-      ctx.response.body = { ok: false, error: "Error al listar métodos de pago" };
+      responderError(ctx, 500, "Error al listar métodos de pago");
     }
   },
 
+  // POST /api/admin/metodos-pago  { nombre, descripcion?, estadoActivo? }
   async crear(ctx: Context) {
-    const body = await leerBody(ctx);
-    const v = crearMetodoPagoSchema.safeParse(body);
-    if (!v.success) {
-      ctx.response.status = 400;
-      ctx.response.body = { ok: false, error: v.error.issues.map((i) => i.message) };
-      return;
-    }
+    const v = crearMetodoPagoSchema.safeParse(await leerBody(ctx));
+    if (!v.success) return responderError(ctx, 400, erroresZod(v.error));
     try {
-      const id = await MetodosPagoModel.crear(v.data);
+      const r = await MetodosPagoModel.crear(v.data);
+      if ("error" in r) return responderError(ctx, r.status, r.error);
       ctx.response.status = 201;
-      ctx.response.body = { ok: true, metodoPagoId: id };
+      ctx.response.body = { ok: true, metodoPagoId: r.id, mensaje: "Método de pago agregado" };
     } catch (e) {
       console.error(e);
-      ctx.response.status = 500;
-      ctx.response.body = { ok: false, error: "Error al crear método de pago" };
+      responderError(ctx, 500, "Error al crear método de pago");
     }
   },
 
+  // PATCH /api/admin/metodos-pago/:id  { nombre?, descripcion?, estadoActivo? }
   async actualizar(ctx: RouterContext<string>) {
     const id = ctx.params.id;
-    if (!id) {
-      ctx.response.status = 400;
-      ctx.response.body = { ok: false, error: "Falta id" };
-      return;
-    }
-    const body = await leerBody(ctx);
-    const v = actualizarMetodoPagoSchema.safeParse(body);
-    if (!v.success) {
-      ctx.response.status = 400;
-      ctx.response.body = { ok: false, error: v.error.issues.map((i) => i.message) };
-      return;
-    }
+    if (!id) return responderError(ctx, 400, "Falta id");
+    const v = actualizarMetodoPagoSchema.safeParse(await leerBody(ctx));
+    if (!v.success) return responderError(ctx, 400, erroresZod(v.error));
     try {
-      const ok = await MetodosPagoModel.actualizar(id, v.data);
-      if (!ok) {
-        ctx.response.status = 404;
-        ctx.response.body = { ok: false, error: "Método no encontrado" };
-        return;
-      }
-      ctx.response.body = { ok: true, mensaje: "Actualizado" };
+      const r = await MetodosPagoModel.actualizar(id, v.data);
+      if ("error" in r) return responderError(ctx, r.status, r.error);
+      ctx.response.body = { ok: true, mensaje: "Método de pago actualizado" };
     } catch (e) {
       console.error(e);
-      ctx.response.status = 500;
-      ctx.response.body = { ok: false, error: "Error al actualizar" };
+      responderError(ctx, 500, "Error al actualizar");
     }
   },
 
+  // DELETE /api/admin/metodos-pago/:id  -> se desactiva, no se borra
   async eliminar(ctx: RouterContext<string>) {
     const id = ctx.params.id;
-    if (!id) {
-      ctx.response.status = 400;
-      ctx.response.body = { ok: false, error: "Falta id" };
-      return;
-    }
+    if (!id) return responderError(ctx, 400, "Falta id");
     try {
-      await MetodosPagoModel.eliminar(id);
+      const r = await MetodosPagoModel.eliminar(id);
+      if ("error" in r) return responderError(ctx, r.status, r.error);
       ctx.response.body = { ok: true, mensaje: "Método desactivado" };
     } catch (e) {
       console.error(e);
-      ctx.response.status = 500;
-      ctx.response.body = { ok: false, error: "Error al desactivar" };
+      responderError(ctx, 500, "Error al desactivar");
     }
   },
 };

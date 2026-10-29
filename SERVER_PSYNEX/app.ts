@@ -37,15 +37,37 @@ import ExplorarRoutes from "./Routes/Explorar/ExplorarRoutes.ts";
 
 // ----------------------- Chat (psicólogo – paciente) -----------------------
 import ChatRoutes from "./Routes/Chat/ChatRoutes.ts";
+// ----------------------- Sala de videollamada -----------------------
+import SalaRoutes from "./Routes/Sala/SalaRoutes.ts";
+// ----------------------- Beneficio empresarial -----------------------
+import BeneficioRoutes from "./Routes/Beneficio/BeneficioRoutes.ts";
+// ----------------------- Paciente: cuestionarios asignados (cambio: nuevo) -----------------------
+import CuestionariosPacienteRoutes from "./Routes/Paciente/CuestionariosPacienteRoutes.ts";
+// ----------------------- Paciente: mi perfil (cambio: nuevo) -----------------------
+import PerfilPacienteRoutes from "./Routes/Paciente/PerfilPacienteRoutes.ts";
+// ----------------------- Paciente: beneficio de la empresa (cambio: nuevo) -----------------------
+import BeneficioPacienteRoutes from "./Routes/Paciente/BeneficioPacienteRoutes.ts";
+// ----------------------- Paciente: inicio, registro diario, cancelar y calificar citas (cambio: nuevo) -----------------------
+import PanelPacienteRoutes from "./Routes/Paciente/PanelPacienteRoutes.ts";
+// ----------------------- Empresa: perfil, inicio, ofertas y favoritos (carpeta empresa.e) -----------------------
+import PanelEmpresaRoutes from "./Routes/empresa.e/PanelEmpresaRoutes.ts";
+// ----------------------- Recordatorios automáticos de citas (cambio: nuevo) -----------------------
+import { iniciarRecordatorios } from "./Helpers/Recordatorios.ts";
+// ----------------------- Empresa: postulaciones (cambio: nuevo) -----------------------
+import PostulacionesEmpresaRoutes from "./Routes/Empresa/PostulacionesEmpresaRoutes.ts";
+// ----------------------- Pagos del paciente con Wompi (cambio: nuevo) -----------------------
+import PagosWompiRoutes from "./Routes/Pagos/PagosWompiRoutes.ts";
+// ----------------------- Administrador: campanita de tareas pendientes (cambio: nuevo) -----------------------
+import PendientesAdminRoutes from "./Routes/Administrador/PendientesAdminRoutes.ts";
 
 const PUERTO = Number(Deno.env.get("PORT") ?? 8001);
 const FRONTEND_URL = Deno.env.get("FRONTEND_URL") ?? "http://localhost:4321";
 
 const app = new Application();
 
+// cambio (merge con main): se deja una sola configuración de CORS con FRONTEND_URL del .env
+// (main tenía origin: "http://localhost:4321", que es el mismo valor por defecto)
 app.use(oakCors({
-  origin: "http://localhost:4321", // el origen de tu frontend (Astro)
-  credentials: true, // necesario para que viajen las cookies
     origin: FRONTEND_URL,  // el origen de tu frontend (Astro), desde el .env
     credentials: true,     // necesario para que viajen las cookies
 }));
@@ -62,19 +84,9 @@ app.use(async (ctx, next) => {
   }
 });
 
+// cambio (merge con main): se unieron las dos listas de rutas; las de Empresa
+// que subió main (perfil, ofertas, postulaciones, notificaciones, favoritos) quedan abajo
 const routes = [
-  authRoutes,
-  usuarioRoutes,
-  CuestionariosRouter,
-  EstadisticasRoutes,
-  CitasRouter,
-  // Empresa
-  PerfilEmpresaRouter,
-  ofertaLaboralRouter,
-  postulacionRouter,
-  NotificacionRouter,
-  favoritoRouter
-
     // Compartidas
     authRoutes, NotificacionesRouter,
     // Administrador
@@ -87,13 +99,41 @@ const routes = [
     ExplorarRoutes,
     // Chat (psicólogo – paciente)
     ChatRoutes,
+    // Sala de videollamada (WebRTC)
+    SalaRoutes,
+    // Beneficio empresarial (planes para trabajadores)
+    BeneficioRoutes,
+    // Paciente: cuestionarios que le asignaron (cambio: nuevo, solo lectura)
+    CuestionariosPacienteRoutes,
+    // Paciente: mi perfil con foto (cambio: nuevo)
+    PerfilPacienteRoutes,
+    // Paciente: código de su empresa y sesiones cubiertas (cambio: nuevo)
+    BeneficioPacienteRoutes,
+    // Paciente: inicio, registro diario, cancelar y calificar citas (cambio: nuevo)
+    PanelPacienteRoutes,
+    // Empresa: perfil, inicio, ofertas y favoritos (carpeta empresa.e)
+    PanelEmpresaRoutes,
+    // Empresa: ver postulaciones a sus ofertas (cambio: nuevo, solo lectura)
+    PostulacionesEmpresaRoutes,
+    // Pagos del paciente: citas y paquetes con Wompi (cambio: nuevo)
+    PagosWompiRoutes,
+    // Administrador: tareas pendientes para su campanita (cambio: nuevo)
+    PendientesAdminRoutes,
+    // Empresa (rutas que subió main)
+    PerfilEmpresaRouter,
+    ofertaLaboralRouter,
+    postulacionRouter,
+    NotificacionRouter,
+    favoritoRouter,
 ];
 routes.forEach((router) => {
   app.use(router.routes());
   app.use(router.allowedMethods());
 });
 
-console.log("Servidor corriendo por el puerto 8001");
-await app.listen({ port: 8001 });
+// cambio: revisa cada 15 minutos las citas de las próximas 24 horas y manda los recordatorios
+iniciarRecordatorios();
+
+// cambio (merge con main): main tenía el puerto fijo 8001; se usa PUERTO (8001 por defecto)
 console.log(`Servidor corriendo por el puerto ${PUERTO}`);
 await app.listen({ port: PUERTO });

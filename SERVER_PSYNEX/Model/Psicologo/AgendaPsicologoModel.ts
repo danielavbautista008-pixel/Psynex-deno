@@ -4,8 +4,8 @@ import type { ConfiguracionAgendaInput } from "../../Validators/Psicologo/Agenda
 // Valores por defecto (los mismos que trae seleccionados la vista Agenda)
 const POR_DEFECTO = {
   duracionMinutos: 45,
-  anticipacionHoras: 12,
-  cancelacionHoras: 12,
+  anticipacionHoras: 5/60,  // 5 minutos
+  cancelacionHoras: 1,
   modalidades: ["Virtual", "Presencial"],
   tiposConsulta: [] as string[],
 };

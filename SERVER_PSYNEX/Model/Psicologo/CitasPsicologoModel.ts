@@ -40,10 +40,18 @@ export const CitasPsicologoModel = {
       `SELECT
          c.CitaId, c.FechaHora, c.DuracionMinutos, c.Modalidad, c.Estado,
          c.RazonConsulta, c.LinkVideollamada, c.CreadoEn, c.PacienteId,
+         c.Direccion, c.Indicaciones, -- cambio: lugar de la cita presencial
          COALESCE(up.NombreCompleto, 'Paciente') AS PacienteNombre,
          COALESCE(up.Email, '') AS PacienteEmail,
          up.FechaNacimiento AS PacienteFechaNacimiento,
          c.TipoCita,
+         c.Formato,
+         -- Acompañantes de una cita de pareja o familiar ("Ana Ruiz, Luis Ruiz")
+         (SELECT GROUP_CONCAT(ua.NombreCompleto ORDER BY pc.AgregadoEn SEPARATOR ', ')
+            FROM participantescita pc
+            JOIN perfilpaciente pa ON pa.PerfiluId = pc.PacienteId
+            JOIN usuarios ua ON ua.UsuarioId = pa.UsuarioId
+           WHERE pc.CitaId = c.CitaId) AS Acompanantes,
          -- Estado del último pago de la cita (null si todavía no hay pago)
          (SELECT pg.EstadoPago FROM pagos pg
            WHERE pg.CitaId = c.CitaId
@@ -107,6 +115,18 @@ export const CitasPsicologoModel = {
     return rows[0] ?? null;
   },
 
+  // Acompañantes de una cita (pareja o familia), para avisarles también
+  async acompanantes(citaId: string) {
+    return await conexion.query(
+      `SELECT u.UsuarioId, u.NombreCompleto, u.Email
+       FROM participantescita pc
+       JOIN perfilpaciente pa ON pa.PerfiluId = pc.PacienteId
+       JOIN usuarios u ON u.UsuarioId = pa.UsuarioId AND u.EstadoActivo = 1
+       WHERE pc.CitaId = ?`,
+      [citaId],
+    ) as { UsuarioId: string; NombreCompleto: string; Email: string }[];
+  },
+
   // Cambia el estado de UNA cita del psicólogo.
   //  - Cancelada: guarda la fecha de cancelación (la usan las estadísticas).
   //  - Confirmada + Virtual: crea la sala de videollamada de la cita
@@ -115,7 +135,7 @@ export const CitasPsicologoModel = {
     citaId: string,
     perfilId: string,
     estado: string,
-    extras?: { linkVideollamada?: string },
+    extras?: { linkVideollamada?: string; direccion?: string; indicaciones?: string },
   ): Promise<boolean> {
     const existe = await this.buscarPorId(citaId, perfilId);
     if (!existe) return false;
@@ -130,6 +150,14 @@ export const CitasPsicologoModel = {
       }
       if (estado === "Cancelada") {
         campos.push("CanceladaEn = NOW()");
+      }
+      // cambio: cita presencial confirmada -> se guarda el lugar. Si el
+      // psicólogo no escribió una dirección, se usa la de su perfil.
+      if (estado === "Confirmada" && existe.Modalidad === "Presencial") {
+        campos.push("Direccion = COALESCE(NULLIF(?, ''), (SELECT ps.Direccion FROM perfilpsicologo ps WHERE ps.PerfilId = ?))");
+        valores.push(extras?.direccion ?? "", perfilId);
+        campos.push("Indicaciones = NULLIF(?, '')");
+        valores.push(extras?.indicaciones ?? "");
       }
 
       await conn.execute(

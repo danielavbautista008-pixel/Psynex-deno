@@ -12,6 +12,12 @@ type Fila = Record<string, unknown>;
 //  - En conversaciones: Usuario1Id = psicólogo y Usuario2Id = paciente
 //    (los dos son UsuarioId de la tabla usuarios).
 //  - Solo el psicólogo puede cerrar o reabrir la conversación.
+//
+// Chat entre empresa y psicólogo (postulados a sus ofertas):
+//  - Solo la empresa la puede iniciar, y solo con psicólogos que se
+//    postularon a alguna de sus ofertas.
+//  - Ahí Usuario1Id = empresa y Usuario2Id = psicólogo, así que quien
+//    puede cerrarla es la empresa (siempre es "quien la inició").
 // =====================================================================
 
 export interface MensajeChat {
@@ -98,14 +104,18 @@ export const ChatModel = {
     const filas = await conexion.query(
       `SELECT c.ConversacionId, c.Usuario1Id, c.Cerrada,
               IF(c.Usuario1Id = ?, c.Usuario2Id, c.Usuario1Id) AS OtroId,
-              u.NombreCompleto, u.Rol,
-              (COALESCE(pp.Foto, ps.Foto, '') LIKE 'data:image/%') AS TieneFoto,
+              COALESCE(pe.NombreEmpresa, u.NombreCompleto) AS NombreCompleto, u.Rol,
+              -- cambio: la foto se toma según el ROL de la otra persona (antes con COALESCE,
+              -- un psicólogo que también tenía fila en perfilpaciente salía con "sin-foto.jpg")
+              (COALESCE(CASE u.Rol WHEN 'Psicologo' THEN ps.Foto WHEN 'Empresa' THEN pe.Logo ELSE pp.Foto END, '') LIKE 'data:image/%') AS TieneFoto,
+              CRC32(CASE u.Rol WHEN 'Psicologo' THEN ps.Foto WHEN 'Empresa' THEN pe.Logo ELSE pp.Foto END) AS FotoVersion, -- cambio: versión de la foto
               (SELECT COUNT(*) FROM mensajes m
                 WHERE m.ConversacionId = c.ConversacionId AND m.EmisorId <> ? AND m.EstaLeido = 0) AS NoLeidos
        FROM conversaciones c
        JOIN usuarios u ON u.UsuarioId = IF(c.Usuario1Id = ?, c.Usuario2Id, c.Usuario1Id)
        LEFT JOIN perfilpaciente pp ON pp.UsuarioId = u.UsuarioId
        LEFT JOIN perfilpsicologo ps ON ps.UsuarioId = u.UsuarioId
+       LEFT JOIN perfilempresa pe ON pe.UsuarioId = u.UsuarioId
        WHERE (c.Usuario1Id = ? OR c.Usuario2Id = ?) AND u.EstadoActivo = 1`,
       [usuarioId, usuarioId, usuarioId, usuarioId, usuarioId],
     ) as Fila[];
@@ -132,15 +142,26 @@ export const ChatModel = {
         [psicologoUsuario, pacienteUsuario],
       ) as Fila[];
 
+      // Chat con empresa: a qué oferta se postuló el psicólogo (la más reciente)
+      // (en esas conversaciones Usuario1Id es la empresa y el otro es el psicólogo)
+      let detalle: string | null = null;
+      const iniciador = String(f.Usuario1Id);
+      if (await this.esEmpresa(iniciador)) {
+        const psicologo = iniciador === usuarioId ? String(f.OtroId) : usuarioId;
+        detalle = (await this.ofertaEntre(iniciador, psicologo)) ?? "Oferta laboral";
+      }
+
       lista.push({
         id: conversacionId,
         otroId: String(f.OtroId),
         nombre: String(f.NombreCompleto ?? "Usuario"),
         rol: String(f.Rol ?? ""),
         tieneFoto: Number(f.TieneFoto ?? 0) === 1,
+        fotoVersion: String(f.FotoVersion ?? ""),
         cerrada: Number(f.Cerrada ?? 0) === 1,
         noLeidos: Number(f.NoLeidos ?? 0),
-        proximaCita: cita?.Proxima ?? null,
+        proximaCita: detalle ? null : cita?.Proxima ?? null,
+        detalle,
         ultimoMensaje: ultimo ? aMensaje(ultimo) : null,
       });
     }
@@ -267,10 +288,11 @@ export const ChatModel = {
   // Foto de la otra persona: solo si comparten una conversación
   async fotoDe(usuarioId: string, quienPide: string) {
     const [f] = await conexion.query(
-      `SELECT COALESCE(pp.Foto, ps.Foto) AS Foto
+      `SELECT CASE u.Rol WHEN 'Psicologo' THEN ps.Foto WHEN 'Empresa' THEN pe.Logo ELSE pp.Foto END AS Foto -- cambio: foto según el rol
        FROM usuarios u
        LEFT JOIN perfilpaciente pp ON pp.UsuarioId = u.UsuarioId
        LEFT JOIN perfilpsicologo ps ON ps.UsuarioId = u.UsuarioId
+       LEFT JOIN perfilempresa pe ON pe.UsuarioId = u.UsuarioId
        WHERE u.UsuarioId = ?
          AND (u.UsuarioId = ? OR EXISTS (
                SELECT 1 FROM conversaciones c
@@ -313,9 +335,107 @@ export const ChatModel = {
 
   async nombreDe(usuarioId: string): Promise<string> {
     const [f] = await conexion.query(
-      `SELECT NombreCompleto FROM usuarios WHERE UsuarioId = ? LIMIT 1`,
+      `SELECT COALESCE(pe.NombreEmpresa, u.NombreCompleto) AS NombreCompleto
+       FROM usuarios u LEFT JOIN perfilempresa pe ON pe.UsuarioId = u.UsuarioId
+       WHERE u.UsuarioId = ? LIMIT 1`,
       [usuarioId],
     ) as Fila[];
     return String(f?.NombreCompleto ?? "Alguien");
+  },
+
+  // ----------------------- Chat empresa – postulados -----------------------
+
+  async esEmpresa(usuarioId: string): Promise<boolean> {
+    const [f] = await conexion.query(
+      `SELECT 1 AS ok FROM perfilempresa WHERE UsuarioId = ? LIMIT 1`,
+      [usuarioId],
+    ) as Fila[];
+    return Boolean(f);
+  },
+
+  // Título de la oferta más reciente a la que el psicólogo se postuló con esa empresa
+  async ofertaEntre(empresaUsuarioId: string, psicologoUsuarioId: string): Promise<string | null> {
+    const [f] = await conexion.query(
+      `SELECT o.Titulo
+       FROM postulaciones po
+       JOIN ofertaslaborales o ON o.OfertaId = po.OfertaId
+       JOIN perfilempresa pe ON pe.PerfileId = o.PerfileId
+       WHERE pe.UsuarioId = ? AND po.UsuarioId = ?
+       ORDER BY po.FechaPostulacion DESC LIMIT 1`,
+      [empresaUsuarioId, psicologoUsuarioId],
+    ) as Fila[];
+    return f?.Titulo ? String(f.Titulo) : null;
+  },
+
+  // Psicólogos que se postularon a las ofertas de la empresa (uno por persona,
+  // con las ofertas a las que se postuló y la conversación si ya existe)
+  async postuladosDeEmpresa(empresaUsuarioId: string) {
+    const filas = await conexion.query(
+      `SELECT po.UsuarioId, u.NombreCompleto, po.Estado, po.FechaPostulacion, o.Titulo,
+              (ps.Foto IS NOT NULL AND ps.Foto LIKE 'data:image/%') AS TieneFoto,
+              CRC32(ps.Foto) AS FotoVersion,
+              (SELECT c.ConversacionId FROM conversaciones c
+                WHERE (c.Usuario1Id = pe.UsuarioId AND c.Usuario2Id = po.UsuarioId)
+                   OR (c.Usuario1Id = po.UsuarioId AND c.Usuario2Id = pe.UsuarioId)
+                LIMIT 1) AS ConversacionId
+       FROM postulaciones po
+       JOIN ofertaslaborales o ON o.OfertaId = po.OfertaId
+       JOIN perfilempresa pe ON pe.PerfileId = o.PerfileId
+       JOIN usuarios u ON u.UsuarioId = po.UsuarioId AND u.EstadoActivo = 1
+       LEFT JOIN perfilpsicologo ps ON ps.UsuarioId = u.UsuarioId
+       WHERE pe.UsuarioId = ?
+       ORDER BY po.FechaPostulacion DESC`,
+      [empresaUsuarioId],
+    ) as Fila[];
+
+    const porPersona = new Map<string, {
+      usuarioId: string; nombre: string; tieneFoto: boolean; fotoVersion: string; conversacionId: string | null;
+      ultimaPostulacion: unknown; ofertas: { titulo: string; estado: string }[];
+    }>();
+    for (const f of filas) {
+      const id = String(f.UsuarioId);
+      if (!porPersona.has(id)) {
+        porPersona.set(id, {
+          usuarioId: id,
+          nombre: String(f.NombreCompleto ?? "Psicólogo"),
+          tieneFoto: Number(f.TieneFoto ?? 0) === 1,
+          fotoVersion: String(f.FotoVersion ?? ""),
+          conversacionId: f.ConversacionId ? String(f.ConversacionId) : null,
+          ultimaPostulacion: f.FechaPostulacion,
+          ofertas: [],
+        });
+      }
+      porPersona.get(id)!.ofertas.push({ titulo: String(f.Titulo), estado: String(f.Estado) });
+    }
+    return [...porPersona.values()];
+  },
+
+  // La empresa le escribe a un postulado: devuelve la conversación (la crea si
+  // no existe). null si ese psicólogo no se postuló a ninguna oferta suya.
+  async conversacionConPostulado(empresaUsuarioId: string, psicologoUsuarioId: string) {
+    const [postulado] = await conexion.query(
+      `SELECT 1 AS ok FROM postulaciones po
+       JOIN ofertaslaborales o ON o.OfertaId = po.OfertaId
+       JOIN perfilempresa pe ON pe.PerfileId = o.PerfileId
+       JOIN usuarios u ON u.UsuarioId = po.UsuarioId AND u.EstadoActivo = 1
+       WHERE pe.UsuarioId = ? AND po.UsuarioId = ? LIMIT 1`,
+      [empresaUsuarioId, psicologoUsuarioId],
+    ) as Fila[];
+    if (!postulado) return null;
+
+    const [existe] = await conexion.query(
+      `SELECT ConversacionId FROM conversaciones
+       WHERE (Usuario1Id = ? AND Usuario2Id = ?) OR (Usuario1Id = ? AND Usuario2Id = ?) LIMIT 1`,
+      [empresaUsuarioId, psicologoUsuarioId, psicologoUsuarioId, empresaUsuarioId],
+    ) as Fila[];
+    if (existe) return String(existe.ConversacionId);
+
+    const id = crypto.randomUUID();
+    await conexion.execute(
+      `INSERT INTO conversaciones (ConversacionId, Usuario1Id, Usuario2Id, CitaId, FechaInicio, Cerrada)
+       VALUES (?, ?, ?, NULL, NOW(), 0)`,
+      [id, empresaUsuarioId, psicologoUsuarioId],
+    );
+    return id;
   },
 };

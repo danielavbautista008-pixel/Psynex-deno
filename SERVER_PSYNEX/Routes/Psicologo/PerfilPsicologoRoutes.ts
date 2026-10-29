@@ -13,5 +13,13 @@ router.get("/", ...soloPsicologo, PerfilPsicologoController.obtener);
 router.patch("/", ...soloPsicologo, PerfilPsicologoController.actualizar);
 router.get("/especialidades", ...soloPsicologo, PerfilPsicologoController.catalogoEspecialidades);
 router.put("/especialidades", ...soloPsicologo, PerfilPsicologoController.reemplazarEspecialidades);
+router.get("/foto", ...soloPsicologo, PerfilPsicologoController.foto);
+router.put("/foto", ...soloPsicologo, PerfilPsicologoController.guardarFoto);
+router.post("/estudios", ...soloPsicologo, PerfilPsicologoController.crearEstudio);
+router.patch("/estudios/:id", ...soloPsicologo, PerfilPsicologoController.actualizarEstudio);
+router.delete("/estudios/:id", ...soloPsicologo, PerfilPsicologoController.eliminarEstudio);
+router.post("/experiencia", ...soloPsicologo, PerfilPsicologoController.crearExperiencia);
+router.patch("/experiencia/:id", ...soloPsicologo, PerfilPsicologoController.actualizarExperiencia);
+router.delete("/experiencia/:id", ...soloPsicologo, PerfilPsicologoController.eliminarExperiencia);
 
 export default router;

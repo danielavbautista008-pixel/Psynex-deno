@@ -3,6 +3,7 @@ import {
   listarCitasPsicologoSchema,
   cambiarEstadoCitaSchema,
 } from "../../Validators/Psicologo/CitasPsicologoValidator.ts";
+import { conexion } from "../../Model/conexion.ts";
 import { CitasPsicologoModel } from "../../Model/Psicologo/CitasPsicologoModel.ts";
 import { obtenerPerfilPsicologo } from "../../Helpers/PsicologoAuth.ts";
 import { EmailService } from "../../Helpers/EmailService.ts";
@@ -155,7 +156,7 @@ export const CitasPsicologoController = {
         return;
       }
 
-      const { estado, motivo, linkVideollamada } = validacion.data;
+      const { estado, motivo, linkVideollamada, direccion, indicaciones } = validacion.data;
 
       if (!(TRANSICIONES[cita.Estado] ?? []).includes(estado)) {
         ctx.response.status = 409;
@@ -177,12 +178,19 @@ export const CitasPsicologoController = {
         id,
         perfil.PerfilId,
         estado,
-        { linkVideollamada },
+        { linkVideollamada, direccion, indicaciones },
       );
       if (!ok) {
         ctx.response.status = 400;
         ctx.response.body = { ok: false, error: "No se pudo actualizar la cita" };
         return;
+      }
+
+      // cambio: lugar de la cita presencial (ya guardado: el escrito o el del perfil)
+      let lugar = "";
+      if (estado === "Confirmada" && cita.Modalidad === "Presencial") {
+        const [l] = await conexion.query(`SELECT Direccion FROM citas WHERE CitaId = ? LIMIT 1`, [id]) as { Direccion: string | null }[];
+        lugar = String(l?.Direccion ?? "").trim();
       }
 
       const fecha = new Date(cita.FechaHora).toLocaleDateString("es-CO");
@@ -200,6 +208,8 @@ export const CitasPsicologoController = {
           hora,
           modalidad: cita.Modalidad,
           enlaceVideollamada: linkVideollamada ?? cita.LinkVideollamada,
+          direccion: lugar, // cambio: lugar + botón de Google Maps en el correo
+          indicaciones,
         }).catch((err) => console.error("Email confirmación:", err));
       }
 
@@ -211,6 +221,74 @@ export const CitasPsicologoController = {
           hora,
           motivo,
         }).catch((err) => console.error("Email cancelación:", err));
+      }
+
+      // cambio: la notificación dentro de Psynex también le llega al paciente
+      // que agendó (antes solo recibía el correo; la notificación solo les
+      // llegaba a los acompañantes).
+      if (estado === "Confirmada" || estado === "Cancelada") {
+        try {
+          const [titular] = await conexion.query(
+            `SELECT pa.UsuarioId FROM perfilpaciente pa WHERE pa.PerfiluId = ? LIMIT 1`,
+            [cita.PacienteId],
+          ) as { UsuarioId: string }[];
+          if (titular?.UsuarioId) {
+            await conexion.execute(
+              `INSERT INTO notificaciones (NotificacionId, UsuarioId, Tipo, Titulo, Mensaje, EstaLeida, FechaEnvio)
+               VALUES (?, ?, 'Sistema', ?, ?, 0, NOW())`,
+              [
+                crypto.randomUUID(),
+                titular.UsuarioId,
+                estado === "Confirmada" ? "Cita confirmada" : "Cita cancelada",
+                estado === "Confirmada"
+                  ? `${perfil.NombreCompleto} aceptó tu cita del ${fecha} a las ${hora}.${lugar ? ` Lugar: ${lugar}.` : ""} Ya puedes pagarla en Mis citas.`
+                  : `${perfil.NombreCompleto} canceló tu cita del ${fecha} a las ${hora}.${motivo ? ` Motivo: ${motivo}` : ""}`,
+              ],
+            );
+          }
+        } catch (err) {
+          console.error("Notificación paciente:", err);
+        }
+      }
+
+      // Cita de pareja o familiar: los acompañantes también se enteran
+      if (estado === "Confirmada" || estado === "Cancelada") {
+        const acompanantes = await CitasPsicologoModel.acompanantes(id).catch(() => []);
+        for (const a of acompanantes) {
+          if (estado === "Confirmada") {
+            EmailService.enviarAceptacionCita({
+              to: a.Email,
+              nombreUsuario: a.NombreCompleto,
+              nombrePsicologo: perfil.NombreCompleto,
+              fecha,
+              hora,
+              modalidad: cita.Modalidad,
+              enlaceVideollamada: linkVideollamada ?? cita.LinkVideollamada,
+              direccion: lugar,
+              indicaciones,
+            }).catch((err) => console.error("Email confirmación (acompañante):", err));
+          } else {
+            EmailService.enviarCancelacionCita({
+              to: a.Email,
+              nombreUsuario: a.NombreCompleto,
+              fecha,
+              hora,
+              motivo,
+            }).catch((err) => console.error("Email cancelación (acompañante):", err));
+          }
+          await conexion.execute(
+            `INSERT INTO notificaciones (NotificacionId, UsuarioId, Tipo, Titulo, Mensaje, EstaLeida, FechaEnvio)
+             VALUES (?, ?, 'Sistema', ?, ?, 0, NOW())`,
+            [
+              crypto.randomUUID(),
+              a.UsuarioId,
+              estado === "Confirmada" ? "Cita confirmada" : "Cita cancelada",
+              estado === "Confirmada"
+                ? `${perfil.NombreCompleto} confirmó la cita del ${fecha} a las ${hora}.`
+                : `La cita del ${fecha} a las ${hora} fue cancelada.`,
+            ],
+          ).catch((err) => console.error("Notificación acompañante:", err));
+        }
       }
 
       ctx.response.body = { ok: true, mensaje: `Cita marcada como ${estado}` };

@@ -24,5 +24,15 @@ export const eventoSocketSchema = z.discriminatedUnion("tipo", [
   z.object({ tipo: z.literal("escribiendo"), conversacionId: z.string().min(1).max(64) }),
   z.object({ tipo: z.literal("leidos"), conversacionId: z.string().min(1).max(64) }),
   z.object({ tipo: z.literal("ping") }),
+  // Sala de videollamada: datos de conexión WebRTC entre los navegadores.
+  // "para" es la persona a la que va (oferta, respuesta, ice); sin "para"
+  // el aviso va a todos los de la sala (medios).
+  z.object({
+    tipo: z.literal("sala"),
+    citaId: z.string().min(8).max(64),
+    accion: z.enum(["hola", "entrar", "oferta", "respuesta", "ice", "medios", "salir"]),
+    para: z.string().min(1).max(64).optional(),
+    datos: z.unknown().optional(),
+  }),
 ]);
 export type EventoSocket = z.infer<typeof eventoSocketSchema>;
