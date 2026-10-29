@@ -9,6 +9,9 @@ const SOLO_PUBLICOS = `p.EstaVerificado = 1 AND u.EstadoActivo = 1 AND u.Rol = '
 
 // Valores por defecto si el psicólogo todavía no configuró su agenda
 const AGENDA_POR_DEFECTO = { duracion: 45, anticipacionHoras: 12 };
+// cambio: los horarios "Especifica" (horario extra de un día puntual) solo
+// piden 15 minutos de anticipación; los fijos usan la anticipación del psicólogo
+const MINUTOS_MINIMOS_ANTES = 15;
 
 // ---------------------------------------------------------------------
 // Ayudas para armar la respuesta (texto listo para la vista)
@@ -170,7 +173,8 @@ async function calcularDisponibilidad(perfilId: string, desde: string, dias: num
   });
 
   const ahora = ahoraColombia();
-  const minimo = aMinutos(ahora.fecha, ahora.hora) + anticipacion * 60;
+  const minimoFijo = aMinutos(ahora.fecha, ahora.hora) + Math.max(anticipacion * 60, MINUTOS_MINIMOS_ANTES);
+  const minimoPuntual = aMinutos(ahora.fecha, ahora.hora) + MINUTOS_MINIMOS_ANTES;
 
   const resultado: DiaDisponible[] = [];
   for (let i = 0; i < dias; i++) {
@@ -182,6 +186,7 @@ async function calcularDisponibilidad(perfilId: string, desde: string, dias: num
 
     const horas = new Set<string>();
     for (const b of delDia) {
+      const minimo = b.TipoConfiguracion === "Fija" ? minimoFijo : minimoPuntual;
       const fin = aMinutos(fecha, horaCorta(String(b.HoraFin)));
       for (let t = aMinutos(fecha, horaCorta(String(b.HoraInicio))); t + duracion <= fin; t += duracion) {
         if (t < minimo) continue;

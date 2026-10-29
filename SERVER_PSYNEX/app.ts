@@ -44,6 +44,8 @@ import PerfilPacienteRoutes from "./Routes/Paciente/PerfilPacienteRoutes.ts";
 import BeneficioPacienteRoutes from "./Routes/Paciente/BeneficioPacienteRoutes.ts";
 // ----------------------- Paciente: inicio, registro diario, cancelar y calificar citas (cambio: nuevo) -----------------------
 import PanelPacienteRoutes from "./Routes/Paciente/PanelPacienteRoutes.ts";
+// ----------------------- Empresa: perfil, inicio, ofertas y favoritos (carpeta empresa.e) -----------------------
+import PanelEmpresaRoutes from "./Routes/empresa.e/PanelEmpresaRoutes.ts";
 // ----------------------- Recordatorios automáticos de citas (cambio: nuevo) -----------------------
 import { iniciarRecordatorios } from "./Helpers/Recordatorios.ts";
 // ----------------------- Empresa: postulaciones (cambio: nuevo) -----------------------
@@ -100,6 +102,8 @@ const routes = [
     BeneficioPacienteRoutes,
     // Paciente: inicio, registro diario, cancelar y calificar citas (cambio: nuevo)
     PanelPacienteRoutes,
+    // Empresa: perfil, inicio, ofertas y favoritos (carpeta empresa.e)
+    PanelEmpresaRoutes,
     // Empresa: ver postulaciones a sus ofertas (cambio: nuevo, solo lectura)
     PostulacionesEmpresaRoutes,
     // Pagos del paciente: citas y paquetes con Wompi (cambio: nuevo)
